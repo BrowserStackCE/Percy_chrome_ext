@@ -158,7 +158,7 @@ cd "$EXTENSION_DIR"
 
 echo "📦 Installing extension dependencies..."
 
-npm install
+npm install --legacy-peer-deps
 
 echo
 echo "🔨 Building extension..."
