@@ -14,18 +14,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
       # ------------------------------------------------------
       # Checkout
       # ------------------------------------------------------
-
       - name: Checkout repository
         uses: actions/checkout@v4
 
       # ------------------------------------------------------
       # Setup Go
       # ------------------------------------------------------
-
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -34,22 +31,16 @@ jobs:
       # ------------------------------------------------------
       # Setup Node
       # ------------------------------------------------------
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
 
       # ------------------------------------------------------
-      # Make build script executable
+      # Make build script executable & Build
       # ------------------------------------------------------
-
       - name: Make build script executable
         run: chmod +x build-distributables.sh
-
-      # ------------------------------------------------------
-      # Build everything
-      # ------------------------------------------------------
 
       - name: Build distributables
         run: ./build-distributables.sh
@@ -57,7 +48,6 @@ jobs:
       # ------------------------------------------------------
       # Verify output
       # ------------------------------------------------------
-
       - name: Verify distributables
         run: |
           echo "=========================================="
@@ -68,14 +58,12 @@ jobs:
 
           echo
           echo "Checking Linux..."
-
           test -f Distributables/percy-linux/server
           test -f Distributables/percy-linux/server.sh
           test -f Distributables/percy-linux/Instruction.md
 
           echo
           echo "Checking Mac..."
-
           test -f Distributables/percy-mac/server
           test -f Distributables/percy-mac/server-arm64
           test -f Distributables/percy-mac/server.sh
@@ -83,156 +71,65 @@ jobs:
 
           echo
           echo "Checking Windows..."
-
           test -f Distributables/percy-windows/server.exe
           test -f Distributables/percy-windows/server.bat
           test -f Distributables/percy-windows/Instructions.md
 
           echo
           echo "Checking Extension..."
-
           test -d Distributables/percy-local-manager-extension
 
           echo
           echo "✅ All distributables verified"
 
       # ------------------------------------------------------
-      # Prepare release folders
+      # Prepare release folders (Creates the exact tree structure)
       # ------------------------------------------------------
-
       - name: Prepare release packages
         run: |
-
           mkdir -p release/percy-linux
           mkdir -p release/percy-mac
           mkdir -p release/percy-windows
 
-          # --------------------------------------------------
           # Linux
-          # --------------------------------------------------
+          cp -R Distributables/percy-linux/. release/percy-linux/
+          cp -R Distributables/percy-local-manager-extension release/percy-linux/
 
-          cp -R Distributables/percy-linux/. \
-            release/percy-linux/
-
-          cp -R Distributables/percy-local-manager-extension \
-            release/percy-linux/
-
-          # --------------------------------------------------
           # Mac
-          # --------------------------------------------------
+          cp -R Distributables/percy-mac/. release/percy-mac/
+          cp -R Distributables/percy-local-manager-extension release/percy-mac/
 
-          cp -R Distributables/percy-mac/. \
-            release/percy-mac/
-
-          cp -R Distributables/percy-local-manager-extension \
-            release/percy-mac/
-
-          # --------------------------------------------------
           # Windows
-          # --------------------------------------------------
-
-          cp -R Distributables/percy-windows/. \
-            release/percy-windows/
-
-          cp -R Distributables/percy-local-manager-extension \
-            release/percy-windows/
-
-          echo "=========================================="
-          echo "Release package contents"
-          echo "=========================================="
-
-          echo
-          echo "Linux:"
-          find release/percy-linux -maxdepth 3 -type f | sort
-
-          echo
-          echo "Mac:"
-          find release/percy-mac -maxdepth 3 -type f | sort
-
-          echo
-          echo "Windows:"
-          find release/percy-windows -maxdepth 3 -type f | sort
+          cp -R Distributables/percy-windows/. release/percy-windows/
+          cp -R Distributables/percy-local-manager-extension release/percy-windows/
 
       # ------------------------------------------------------
-      # ZIP Linux
+      # Package into ZIPs
       # ------------------------------------------------------
-
-      - name: Package Linux
+      - name: Package Distributables
         run: |
           cd release
+          # Zipping the folders from the outside creates the root folder in the zip
           zip -r ../percy-linux.zip percy-linux
-
-      # ------------------------------------------------------
-      # ZIP Mac
-      # ------------------------------------------------------
-
-      - name: Package Mac
-        run: |
-          cd release
           zip -r ../percy-mac.zip percy-mac
-
-      # ------------------------------------------------------
-      # ZIP Windows
-      # ------------------------------------------------------
-
-      - name: Package Windows
-        run: |
-          cd release
           zip -r ../percy-windows.zip percy-windows
 
       # ------------------------------------------------------
       # Show ZIPs
       # ------------------------------------------------------
-
       - name: Show release files
         run: |
-          echo "=========================================="
-          echo "Release ZIPs"
-          echo "=========================================="
-
-          ls -lh \
-            percy-linux.zip \
-            percy-mac.zip \
-            percy-windows.zip
+          ls -lh percy-linux.zip percy-mac.zip percy-windows.zip
 
       # ------------------------------------------------------
-      # Create Linux Release
+      # Create Unified Release (Fixes the "Latest" link issue)
       # ------------------------------------------------------
-
-      - name: Create Linux Release
+      - name: Create Unified Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create \
-            "percy-linux-${{ github.ref_name }}" \
-            percy-linux.zip \
-            --title "Percy Linux ${{ github.ref_name }}" \
-            --notes "Percy Local Manager for Linux."
-
-      # ------------------------------------------------------
-      # Create Mac Release
-      # ------------------------------------------------------
-
-      - name: Create Mac Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create \
-            "percy-mac-${{ github.ref_name }}" \
-            percy-mac.zip \
-            --title "Percy Mac ${{ github.ref_name }}" \
-            --notes "Percy Local Manager for macOS."
-
-      # ------------------------------------------------------
-      # Create Windows Release
-      # ------------------------------------------------------
-
-      - name: Create Windows Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create \
-            "percy-windows-${{ github.ref_name }}" \
-            percy-windows.zip \
-            --title "Percy Windows ${{ github.ref_name }}" \
-            --notes "Percy Local Manager for Windows."
+            "${{ github.ref_name }}" \
+            percy-linux.zip percy-mac.zip percy-windows.zip \
+            --title "Percy Local Manager ${{ github.ref_name }}" \
+            --notes "Percy Local Manager for Linux, macOS, and Windows."
