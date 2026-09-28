@@ -1,0 +1,47 @@
+# =============================
+# BrowserStack Credentials
+# =============================
+# Credentials are read from environment variables — never commit real values here.
+userName: ${BROWSERSTACK_USERNAME}
+accessKey: ${BROWSERSTACK_ACCESS_KEY}
+
+# ======================
+# BrowserStack Reporting
+# ======================
+projectName: Percy Local Manager
+buildName: Percy Local Manager Tests
+buildIdentifier: '#${BUILD_NUMBER}'
+
+# =======================================
+# Platforms — Mac + Windows web browsers
+# =======================================
+# API and E2E tests hit http://localhost:4321 via BrowserStack Local tunnel.
+# Extension UI tests are skipped on BrowserStack (they require --load-extension
+# which is not supported on cloud browsers).
+platforms:
+  - os: OS X
+    osVersion: Ventura
+    browserName: Chrome
+    browserVersion: latest
+  - os: Windows
+    osVersion: 11
+    browserName: Chrome
+    browserVersion: latest
+
+parallelsPerPlatform: 1
+
+# ==========================================
+# BrowserStack Local
+# Required: the Go backend runs on localhost
+# ==========================================
+browserstackLocal: true
+
+# ===================
+# Timeouts & Debugging
+# ===================
+# Cloud execution is slower than local — increase timeouts generously
+# (individual test timeouts are set in playwright.config.js)
+debug: false
+networkLogs: false
+consoleLogs: errors
+testReporting: true
