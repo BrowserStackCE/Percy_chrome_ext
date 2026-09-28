@@ -3,10 +3,14 @@ const { defineConfig } = require('@playwright/test');
 require('dotenv').config({ path: __dirname + '/.env' });
 
 // On BrowserStack cloud, network round-trips are slower — use a longer timeout.
+// Extension UI tests require --load-extension which is not supported on cloud.
 const isBrowserStack = !!process.env.BROWSERSTACK_USERNAME;
 
 module.exports = defineConfig({
   testDir: './specs',
+  // Exclude extension-ui tests on BrowserStack — they require --load-extension
+  // which is not supported on cloud browsers.
+  testIgnore: isBrowserStack ? ['**/e2e/ui-extension.spec.js'] : [],
   // 60s on BrowserStack cloud, 30s locally
   timeout: isBrowserStack ? 60_000 : 30_000,
   // Always retry twice on BrowserStack (flaky network); once locally in CI

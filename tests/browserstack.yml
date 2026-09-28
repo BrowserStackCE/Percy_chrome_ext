@@ -31,6 +31,15 @@ platforms:
 parallelsPerPlatform: 1
 
 # ==========================================
+# Playwright SDK options
+# ==========================================
+# The SDK renames projects, so --project flags don't work on cloud.
+# Use testMatch to exclude extension-ui tests (require --load-extension,
+# not supported on cloud browsers).
+playwrightConfigOptions:
+  testMatch: "**/{api/**,e2e/snapshot-lifecycle.spec}.js"
+
+# ==========================================
 # BrowserStack Local
 # Required: the Go backend runs on localhost
 # ==========================================
