@@ -121,9 +121,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    # Only run when explicitly enabled via repo variable BROWSERSTACK_ENABLED=true
-    # Set this in: Settings → Variables → Actions → New repository variable
-    if: vars.BROWSERSTACK_ENABLED == 'true'
+    # Only run on push to main (not on PRs) — requires BrowserStack secrets to be set
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
       - name: Checkout repository
