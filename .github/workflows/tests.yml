@@ -1,0 +1,225 @@
+name: Percy Local Manager — Tests & Release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ============================================================
+  # Job 1: Run all tests
+  # ============================================================
+  test:
+    name: API, E2E & Extension UI Tests
+    runs-on: ubuntu-latest
+    env:
+      DISPLAY: ':99'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Build Go backend
+        working-directory: go-backend
+        run: go build -o server ./cmd/server
+
+      - name: Start Go backend
+        working-directory: go-backend
+        run: |
+          ./server &
+          echo "SERVER_PID=$!" >> $GITHUB_ENV
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:4321/health > /dev/null; then
+              echo "Backend is up"
+              break
+            fi
+            echo "Waiting for backend... ($i)"
+            sleep 1
+          done
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: tests/package-lock.json
+
+      - name: Install test dependencies
+        working-directory: tests
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: tests
+        run: npx playwright install chromium --with-deps
+
+      - name: Build Chrome extension
+        working-directory: percy-local-manager-extension
+        run: npm ci && npm run build
+
+      - name: Start virtual display (for headed extension tests)
+        run: |
+          sudo apt-get install -y xvfb
+          Xvfb :99 -screen 0 1280x1024x24 &
+
+      - name: Run API tests
+        working-directory: tests
+        env:
+          BACKEND_URL: http://localhost:4321
+          PERCY_TOKEN: ${{ secrets.PERCY_TOKEN }}
+          PERCY_READ_TOKEN: ${{ secrets.PERCY_READ_TOKEN }}
+        run: npm run test:api
+
+      - name: Run E2E tests
+        working-directory: tests
+        env:
+          BACKEND_URL: http://localhost:4321
+          PERCY_TOKEN: ${{ secrets.PERCY_TOKEN }}
+          PERCY_READ_TOKEN: ${{ secrets.PERCY_READ_TOKEN }}
+        run: npm run test:e2e
+
+      - name: Run Extension UI tests
+        working-directory: tests
+        env:
+          BACKEND_URL: http://localhost:4321
+        run: npm run test:extension-ui
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: tests/playwright-report/
+          retention-days: 14
+
+      - name: Stop Go backend
+        if: always()
+        run: kill $SERVER_PID || true
+
+  # ============================================================
+  # Job 2: Build distributables & create GitHub Release
+  # Only runs on push to main (not on PRs) after tests pass
+  # ============================================================
+  release:
+    name: Build Distributables & Release
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    permissions:
+      contents: write   # needed to create releases and push tags
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so we can read tags
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # ----------------------------------------------------------
+      # Compute the next version (bump patch from latest tag)
+      # ----------------------------------------------------------
+      - name: Compute next version
+        id: version
+        run: |
+          LATEST=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+          if [ -z "$LATEST" ]; then
+            NEXT="v1.0.0"
+          else
+            # Bump patch: v1.2.3 -> v1.2.4
+            MAJOR=$(echo "$LATEST" | cut -d. -f1 | tr -d 'v')
+            MINOR=$(echo "$LATEST" | cut -d. -f2)
+            PATCH=$(echo "$LATEST" | cut -d. -f3)
+            NEXT="v${MAJOR}.${MINOR}.$((PATCH + 1))"
+          fi
+          echo "tag=$NEXT" >> $GITHUB_OUTPUT
+          echo "Next release: $NEXT"
+
+      # ----------------------------------------------------------
+      # Build Go binaries for all platforms
+      # ----------------------------------------------------------
+      - name: Build macOS Intel binary
+        working-directory: go-backend
+        run: |
+          GOOS=darwin GOARCH=amd64 go build -o ../Distributables/percy-mac/server ./cmd/server
+
+      - name: Build macOS Apple Silicon binary
+        working-directory: go-backend
+        run: |
+          GOOS=darwin GOARCH=arm64 go build -o ../Distributables/percy-mac/server-arm64 ./cmd/server
+
+      - name: Build Linux binary
+        working-directory: go-backend
+        run: |
+          GOOS=linux GOARCH=amd64 go build -o ../Distributables/percy-linux/server ./cmd/server
+
+      - name: Build Windows binary
+        working-directory: go-backend
+        run: |
+          GOOS=windows GOARCH=amd64 go build -o ../Distributables/percy-windows/server.exe ./cmd/server
+
+      # ----------------------------------------------------------
+      # Build Chrome extension
+      # ----------------------------------------------------------
+      - name: Build Chrome extension
+        working-directory: percy-local-manager-extension
+        run: |
+          npm ci
+          npm run build
+          cp -R dist/. ../Distributables/percy-local-manager-extension/
+
+      # ----------------------------------------------------------
+      # Package each distributable as a zip
+      # ----------------------------------------------------------
+      - name: Package distributables
+        run: |
+          cd Distributables
+          zip -r percy-mac.zip percy-mac/
+          zip -r percy-linux.zip percy-linux/
+          zip -r percy-windows.zip percy-windows/
+          zip -r percy-chrome-extension.zip percy-local-manager-extension/
+
+      # ----------------------------------------------------------
+      # Tag & create GitHub Release with all zips attached
+      # ----------------------------------------------------------
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Percy Local Manager ${{ steps.version.outputs.tag }}
+          body: |
+            ## Percy Local Manager ${{ steps.version.outputs.tag }}
+
+            Automated release — all tests passed on `main`.
+
+            ### Downloads
+
+            | Platform | File |
+            |---|---|
+            | macOS (Intel + Apple Silicon) | `percy-mac.zip` |
+            | Linux (x86_64) | `percy-linux.zip` |
+            | Windows (x64) | `percy-windows.zip` |
+            | Chrome Extension | `percy-chrome-extension.zip` |
+
+            ### Install
+            See [README.md](https://github.com/${{ github.repository }}/blob/main/README.md) for setup instructions.
+          files: |
+            Distributables/percy-mac.zip
+            Distributables/percy-linux.zip
+            Distributables/percy-windows.zip
+            Distributables/percy-chrome-extension.zip
+          generate_release_notes: true
