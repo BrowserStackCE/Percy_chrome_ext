@@ -3,3 +3,4 @@ tests/.env
 tests/node_modules/
 tests/test-results/
 tests/playwright-report/
+tests/log/
