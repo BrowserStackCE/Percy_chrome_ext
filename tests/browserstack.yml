@@ -9,7 +9,7 @@ accessKey: ${BROWSERSTACK_ACCESS_KEY}
 # BrowserStack Reporting
 # ======================
 projectName: Percy Local Manager
-buildName: Percy Local Manager Tests
+buildName: API + UI Sanity Test
 buildIdentifier: '#${BUILD_NUMBER}'
 
 # =======================================
@@ -29,15 +29,6 @@ platforms:
     browserVersion: latest
 
 parallelsPerPlatform: 1
-
-# ==========================================
-# Playwright SDK options
-# ==========================================
-# The SDK renames projects, so --project flags don't work on cloud.
-# Use testMatch to exclude extension-ui tests (require --load-extension,
-# not supported on cloud browsers).
-playwrightConfigOptions:
-  testMatch: "**/{api/**,e2e/snapshot-lifecycle.spec}.js"
 
 # ==========================================
 # BrowserStack Local

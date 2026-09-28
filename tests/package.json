@@ -21,6 +21,7 @@
   "devDependencies": {
     "@playwright/test": "^1.63.0",
     "browserstack-node-sdk": "^1.71.1",
-    "dotenv": "^18.0.3"
+    "dotenv": "^18.0.3",
+    "serve": "^14.2.6"
   }
 }

@@ -8,11 +8,8 @@ const isBrowserStack = !!process.env.BROWSERSTACK_USERNAME;
 
 module.exports = defineConfig({
   testDir: './specs',
-  // Exclude extension-ui tests on BrowserStack — they require --load-extension
-  // which is not supported on cloud browsers.
-  testIgnore: isBrowserStack ? ['**/e2e/ui-extension.spec.js'] : [],
-  // 60s on BrowserStack cloud, 30s locally
-  timeout: isBrowserStack ? 60_000 : 30_000,
+  // 3 minutes on BrowserStack (Percy CLI startup can take 60-90s), 30s locally
+  timeout: isBrowserStack ? 180_000 : 30_000,
   // Always retry twice on BrowserStack (flaky network); once locally in CI
   retries: isBrowserStack ? 2 : (process.env.CI ? 1 : 0),
   reporter: [['list'], ['html', { open: 'never' }]],
@@ -21,9 +18,6 @@ module.exports = defineConfig({
     extraHTTPHeaders: {
       'Content-Type': 'application/json',
     },
-    // Give each action more time on cloud
-    actionTimeout: isBrowserStack ? 15_000 : 5_000,
-    navigationTimeout: isBrowserStack ? 30_000 : 10_000,
   },
   projects: [
     {
