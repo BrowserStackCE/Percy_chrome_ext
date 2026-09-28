@@ -13,6 +13,8 @@ jobs:
   test:
     name: API, E2E & Extension UI Tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     env:
       DISPLAY: ':99'
 
