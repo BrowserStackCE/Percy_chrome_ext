@@ -62,7 +62,7 @@ jobs:
 
       - name: Build Chrome extension
         working-directory: percy-local-manager-extension
-        run: npm ci && npm run build
+        run: npm ci --legacy-peer-deps && npm run build
 
       - name: Start virtual display (for headed extension tests)
         run: |
@@ -180,7 +180,7 @@ jobs:
       - name: Build Chrome extension
         working-directory: percy-local-manager-extension
         run: |
-          npm ci
+          npm ci --legacy-peer-deps
           npm run build
           cp -R dist/. ../Distributables/percy-local-manager-extension/
 
