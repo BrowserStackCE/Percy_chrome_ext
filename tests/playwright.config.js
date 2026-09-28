@@ -2,10 +2,16 @@
 const { defineConfig } = require('@playwright/test');
 require('dotenv').config({ path: __dirname + '/.env' });
 
+// On BrowserStack cloud, network round-trips are slower — use a longer timeout.
+// Extension UI tests require --load-extension which is not supported on cloud.
+const isBrowserStack = !!process.env.BROWSERSTACK_USERNAME;
+
 module.exports = defineConfig({
   testDir: './specs',
-  timeout: 30_000,
-  retries: process.env.CI ? 2 : 0,
+  // 3 minutes on BrowserStack (Percy CLI startup can take 60-90s), 30s locally
+  timeout: isBrowserStack ? 180_000 : 30_000,
+  // Always retry twice on BrowserStack (flaky network); once locally in CI
+  retries: isBrowserStack ? 2 : (process.env.CI ? 1 : 0),
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: process.env.BACKEND_URL || 'http://localhost:4321',

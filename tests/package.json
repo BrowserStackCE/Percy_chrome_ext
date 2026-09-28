@@ -8,7 +8,11 @@
     "test:api": "playwright test --project=api",
     "test:e2e": "playwright test --project=e2e",
     "test:extension-ui": "playwright test --project=extension-ui",
-    "test:report": "playwright show-report"
+    "test:report": "playwright show-report",
+    "postinstall": "npm update browserstack-node-sdk",
+    "test:bstack": "browserstack-node-sdk playwright test",
+    "test:bstack:api": "browserstack-node-sdk playwright test --project=api",
+    "test:bstack:e2e": "browserstack-node-sdk playwright test --project=e2e"
   },
   "keywords": [],
   "author": "",
@@ -16,6 +20,8 @@
   "type": "commonjs",
   "devDependencies": {
     "@playwright/test": "^1.63.0",
-    "dotenv": "^18.0.3"
+    "browserstack-node-sdk": "^1.71.1",
+    "dotenv": "^18.0.3",
+    "serve": "^14.2.6"
   }
 }
