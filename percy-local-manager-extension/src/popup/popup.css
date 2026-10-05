@@ -37,6 +37,16 @@
   --border-color: var(--ink-150);
 }
 
+.popup__offline-banner {
+  background-color: var(--error-100);
+  border-bottom: 1px solid var(--error-600);
+  color: var(--error-600);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 8px 14px;
+  text-align: center;
+}
+
 * {
   box-sizing: border-box;
 }

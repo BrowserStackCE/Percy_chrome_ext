@@ -56,6 +56,12 @@ export function Popup() {
         aria-hidden="true"
       />
 
+      {isBackendOffline && (
+        <div className="popup__offline-banner" role="alert">
+          <span>⚠️ Backend server is not running. Start the Go server to use Percy Local Manager.</span>
+        </div>
+      )}
+
       <div className="popup__body">
         <QueueCount
           count={queue.count}
