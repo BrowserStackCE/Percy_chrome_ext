@@ -119,8 +119,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    # Only run on push to main (not on PRs) — requires BrowserStack secrets to be set
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
       - name: Checkout repository
