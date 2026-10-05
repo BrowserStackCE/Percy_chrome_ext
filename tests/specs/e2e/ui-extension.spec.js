@@ -5,28 +5,26 @@
 // chrome.runtime.getURL() resolves to the dev server URL — this lets
 // the pages render normally without needing --load-extension.
 //
-// A SINGLE browser page is reused across all tests (navigate between pages)
-// to avoid the overhead of opening/closing a new cloud session per test.
-//
-// This approach works both locally AND on BrowserStack cloud via BrowserStack Local.
-//
-// Pages tested:
-//   - Popup (index.html)         — connection status, capture panel, library panel
-//   - Snapshots (snapshots.html) — snapshot queue list
-//   - Library (library.html)     — search input, snapshot grid
+// Test execution order:
+//   1. "Offline" suite  — runs with the Go backend stopped; verifies the
+//      offline error banner appears in the popup.
+//   2. "Online" suite   — starts the Go backend in beforeAll, then runs all
+//      remaining UI tests that require a live backend.
 //
 // Requires:
-//   - Go backend running on http://localhost:4321
 //   - Vite dev server running on http://localhost:5173
 //     (cd percy-local-manager-extension && npm run dev)
 
 const { test, expect } = require('@playwright/test');
+const { execSync, spawn } = require('child_process');
+const path = require('path');
 
 // The Vite dev server URL — matches `npm run dev` default port
 const EXTENSION_DEV_URL = process.env.EXTENSION_DEV_URL || 'http://localhost:5173';
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:4321';
+const BACKEND_DIR = path.resolve(__dirname, '../../../go-backend');
 
 // chrome.runtime polyfill — injected before each page load.
-// Replaces chrome.runtime.getURL so icon paths resolve to the dev server URL.
 const CHROME_RUNTIME_POLYFILL = `
   (function() {
     var BASE = '${EXTENSION_DEV_URL}';
@@ -43,10 +41,14 @@ const CHROME_RUNTIME_POLYFILL = `
   })();
 `;
 
-test.describe('Extension UI (popup pages via Vite dev server)', () => {
+// ====================================================================
+// Suite 1 — Backend OFFLINE tests
+// Verifies the offline error banner when the Go backend is not running.
+// ====================================================================
+
+test.describe('Extension UI — Backend offline', () => {
   let page;
 
-  // Open ONE page for the whole suite — reused across all tests
   test.beforeAll(async ({ browser }) => {
     page = await browser.newPage();
     await page.addInitScript(CHROME_RUNTIME_POLYFILL);
@@ -56,7 +58,60 @@ test.describe('Extension UI (popup pages via Vite dev server)', () => {
     await page.close();
   });
 
-  // Helper: navigate the shared page to an extension page
+  async function goTo(pagePath) {
+    await page.goto(`${EXTENSION_DEV_URL}/${pagePath}`);
+  }
+
+  test('Popup: shows offline error banner when Go backend is not running', async () => {
+    await goTo('index.html');
+    // Wait for the health check to resolve to 'offline'
+    await page.waitForSelector('.connection-status--offline', { timeout: 10000 });
+    // Popup renders <div class="popup__offline-banner" role="alert"> when backend is offline
+    const banner = page.locator('[role="alert"].popup__offline-banner');
+    await expect(banner).toBeVisible();
+    await expect(banner).toContainText('Backend server is not running');
+  });
+});
+
+// ====================================================================
+// Suite 2 — Backend ONLINE tests
+// Starts the Go backend in beforeAll, runs all remaining UI tests.
+// ====================================================================
+
+test.describe('Extension UI — Backend online', () => {
+  let page;
+  let backendProcess;
+
+  test.beforeAll(async ({ browser }) => {
+    // Start the Go backend
+    backendProcess = spawn('./server', [], {
+      cwd: BACKEND_DIR,
+      detached: false,
+      stdio: 'ignore',
+    });
+
+    // Wait for the backend to be ready (up to 15 s)
+    const deadline = Date.now() + 15000;
+    while (Date.now() < deadline) {
+      try {
+        execSync(`curl -sf ${BACKEND_URL}/health`, { stdio: 'ignore' });
+        break; // backend is up
+      } catch {
+        await new Promise(r => setTimeout(r, 500));
+      }
+    }
+
+    page = await browser.newPage();
+    await page.addInitScript(CHROME_RUNTIME_POLYFILL);
+  });
+
+  test.afterAll(async () => {
+    await page.close();
+    if (backendProcess) {
+      backendProcess.kill();
+    }
+  });
+
   async function goTo(pagePath) {
     await page.goto(`${EXTENSION_DEV_URL}/${pagePath}`);
   }
@@ -94,6 +149,8 @@ test.describe('Extension UI (popup pages via Vite dev server)', () => {
   test('Popup: snapshot name input accepts text', async () => {
     await goTo('index.html');
     // CaptureSnapshotPanel renders <input id="snapshot-name" placeholder="Defaults to page title">
+    // Wait for backend to be connected so the input is enabled
+    await page.waitForSelector('.connection-status--connected', { timeout: 10000 });
     const nameInput = page.locator('#snapshot-name');
     await nameInput.fill('My Test Snapshot');
     await expect(nameInput).toHaveValue('My Test Snapshot');
@@ -111,33 +168,12 @@ test.describe('Extension UI (popup pages via Vite dev server)', () => {
     await expect(page.getByRole('button', { name: 'View Snapshots' })).toBeVisible();
   });
 
-  // ----------------------------------------------------------------
-  // Backend offline error banner
-  // ----------------------------------------------------------------
-
-  test('Popup: shows offline error banner when Go backend is not running', async () => {
-    await goTo('index.html');
-    // Wait for the health check to resolve (status transitions from 'checking' to 'offline')
-    // ConnectionStatus renders <div class="connection-status connection-status--offline">
-    await page.waitForSelector('.connection-status--offline', { timeout: 10000 });
-    // Popup renders <div class="popup__offline-banner" role="alert"> when backend is offline
-    const banner = page.locator('[role="alert"].popup__offline-banner');
-    await expect(banner).toBeVisible();
-    await expect(banner).toContainText('Backend server is not running');
-  });
-
   test('Popup: offline banner is absent when Go backend is connected', async () => {
     await goTo('index.html');
-    // Wait for health check to resolve
-    await page.waitForSelector('.connection-status--connected, .connection-status--offline', { timeout: 10000 });
-    const isConnected = await page.locator('.connection-status--connected').isVisible();
-    if (isConnected) {
-      // Banner must NOT be present when backend is up
-      await expect(page.locator('[role="alert"].popup__offline-banner')).not.toBeVisible();
-    } else {
-      // Backend is offline in this environment — skip the connected assertion
-      test.info().annotations.push({ type: 'skip-reason', description: 'Backend offline in test environment' });
-    }
+    // Wait for health check to resolve to connected
+    await page.waitForSelector('.connection-status--connected', { timeout: 10000 });
+    // Banner must NOT be present when backend is up
+    await expect(page.locator('[role="alert"].popup__offline-banner')).not.toBeVisible();
   });
 
   // ----------------------------------------------------------------
@@ -150,9 +186,6 @@ test.describe('Extension UI (popup pages via Vite dev server)', () => {
     // when idle, and "Finalizing Build…" while status === 'loading'
     const finalizeBtn = page.getByRole('button', { name: 'Finalize Build' });
     await expect(finalizeBtn).toBeVisible();
-    // The button text changes to "Finalizing Build…" during the loading state.
-    // We verify the idle label is present (the loading state is transient and requires
-    // a real Percy token + queued snapshots to trigger in a unit-style UI test).
     await expect(finalizeBtn).toHaveText('Finalize Build');
   });
 
@@ -172,7 +205,6 @@ test.describe('Extension UI (popup pages via Vite dev server)', () => {
 
     // Wait for the snapshot count to load so the button becomes enabled
     // (FinalizeBuildPanel is disabled when snapshots.length === 0)
-    // We check whether the button is enabled; if snapshots exist we click it
     const finalizeBtn = page.getByRole('button', { name: 'Finalize Build' });
     const isEnabled = await finalizeBtn.isEnabled();
 
@@ -181,7 +213,6 @@ test.describe('Extension UI (popup pages via Vite dev server)', () => {
       // FinalizeBuildPanel renders <p class="message message--error">{error}</p> on failure
       const errorMsg = page.locator('.message--error');
       await expect(errorMsg).toBeVisible({ timeout: 15000 });
-      // The error message should contain meaningful failure text
       const text = await errorMsg.innerText();
       expect(text.length).toBeGreaterThan(0);
     } else {
