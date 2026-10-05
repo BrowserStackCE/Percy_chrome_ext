@@ -2,9 +2,7 @@ name: Percy Local Manager — Tests & Release
 
 on:
   push:
-    branches: [main]
   pull_request:
-    branches: [main]
 
 jobs:
   # ============================================================
