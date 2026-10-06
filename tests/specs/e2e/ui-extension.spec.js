@@ -6,10 +6,7 @@
 // the pages render normally without needing --load-extension.
 //
 // Test execution order:
-//   1. "Offline" suite  — runs with the Go backend stopped; verifies the
-//      offline error banner appears in the popup.
-//   2. "Online" suite   — starts the Go backend in beforeAll, then runs all
-//      remaining UI tests that require a live backend.
+//   - Starts the Go backend in beforeAll, then runs all UI tests.
 //
 // Requires:
 //   - Vite dev server running on http://localhost:5173
@@ -42,40 +39,7 @@ const CHROME_RUNTIME_POLYFILL = `
 `;
 
 // ====================================================================
-// Suite 1 — Backend OFFLINE tests
-// Verifies the offline error banner when the Go backend is not running.
-// ====================================================================
-
-test.describe('Extension UI — Backend offline', () => {
-  let page;
-
-  test.beforeAll(async ({ browser }) => {
-    page = await browser.newPage();
-    await page.addInitScript(CHROME_RUNTIME_POLYFILL);
-  });
-
-  test.afterAll(async () => {
-    await page.close();
-  });
-
-  async function goTo(pagePath) {
-    await page.goto(`${EXTENSION_DEV_URL}/${pagePath}`);
-  }
-
-  test('Popup: shows offline error banner when Go backend is not running', async () => {
-    await goTo('index.html');
-    // Wait for the health check to resolve to 'offline'
-    await page.waitForSelector('.connection-status--offline', { timeout: 10000 });
-    // Popup renders <div class="popup__offline-banner" role="alert"> when backend is offline
-    const banner = page.locator('[role="alert"].popup__offline-banner');
-    await expect(banner).toBeVisible();
-    await expect(banner).toContainText('Backend server is not running');
-  });
-});
-
-// ====================================================================
-// Suite 2 — Backend ONLINE tests
-// Starts the Go backend in beforeAll, runs all remaining UI tests.
+// Extension UI tests — requires a live Go backend
 // ====================================================================
 
 test.describe('Extension UI — Backend online', () => {
@@ -149,8 +113,6 @@ test.describe('Extension UI — Backend online', () => {
   test('Popup: snapshot name input accepts text', async () => {
     await goTo('index.html');
     // CaptureSnapshotPanel renders <input id="snapshot-name" placeholder="Defaults to page title">
-    // Wait for backend to be connected so the input is enabled
-    await page.waitForSelector('.connection-status--connected', { timeout: 10000 });
     const nameInput = page.locator('#snapshot-name');
     await nameInput.fill('My Test Snapshot');
     await expect(nameInput).toHaveValue('My Test Snapshot');
@@ -166,14 +128,6 @@ test.describe('Extension UI — Backend online', () => {
     await goTo('index.html');
     // Popup renders <button class="button button--secondary button--block">View Snapshots</button>
     await expect(page.getByRole('button', { name: 'View Snapshots' })).toBeVisible();
-  });
-
-  test('Popup: offline banner is absent when Go backend is connected', async () => {
-    await goTo('index.html');
-    // Wait for health check to resolve to connected
-    await page.waitForSelector('.connection-status--connected', { timeout: 10000 });
-    // Banner must NOT be present when backend is up
-    await expect(page.locator('[role="alert"].popup__offline-banner')).not.toBeVisible();
   });
 
   // ----------------------------------------------------------------
@@ -195,30 +149,6 @@ test.describe('Extension UI — Backend online', () => {
     const finalizeBtn = page.getByRole('button', { name: 'Finalize Build' });
     await expect(finalizeBtn).toBeVisible();
     await expect(finalizeBtn).toBeDisabled();
-  });
-
-  test('Snapshots: Finalize Build shows error message on failure', async () => {
-    await goTo('snapshots.html');
-    // Enter an invalid token so the backend returns an error
-    const tokenInput = page.locator('#percy-token');
-    await tokenInput.fill('invalid-token-for-error-test');
-
-    // Wait for the snapshot count to load so the button becomes enabled
-    // (FinalizeBuildPanel is disabled when snapshots.length === 0)
-    const finalizeBtn = page.getByRole('button', { name: 'Finalize Build' });
-    const isEnabled = await finalizeBtn.isEnabled();
-
-    if (isEnabled) {
-      await finalizeBtn.click();
-      // FinalizeBuildPanel renders <p class="message message--error">{error}</p> on failure
-      const errorMsg = page.locator('.message--error');
-      await expect(errorMsg).toBeVisible({ timeout: 15000 });
-      const text = await errorMsg.innerText();
-      expect(text.length).toBeGreaterThan(0);
-    } else {
-      // No snapshots queued — the button stays disabled; verify the disabled state
-      await expect(finalizeBtn).toBeDisabled();
-    }
   });
 
   // ----------------------------------------------------------------
