@@ -4,11 +4,11 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
 	"strings"
-	"io"
 )
 
 type Controller struct {
@@ -55,6 +55,12 @@ func (c *Controller) Start(token string) error {
 	}
 
 	log.Println("[percy] Percy CLI exists")
+
+	// Best-effort stop of any stale Percy agent from a previous run.
+	// Errors are intentionally ignored — nothing may be running.
+	log.Println("[percy] stopping any existing Percy agent…")
+	_ = exec.Command(c.binary.Path, "exec:stop").Run()
+
 	log.Println("[percy] launching: percy exec:start")
 
 	c.cmd = exec.Command(c.binary.Path, "exec:start")
