@@ -121,14 +121,22 @@ export function finalizeBuildStream(
     }
   });
 
+  // Track whether a named 'error' event already delivered a real message so
+  // the generic onerror handler (which fires when the server closes the
+  // connection after sending the error event) does not overwrite it.
+  let namedErrorReceived = false;
+
   es.addEventListener('error', (e) => {
+    namedErrorReceived = true;
     es.close();
-    const msg = (e as MessageEvent).data ?? 'Connection lost';
+    const msg = (e as MessageEvent).data || 'Percy build failed';
     callbacks.onError(msg);
   });
 
-  // Generic onerror fires when the connection itself drops
+  // Generic onerror fires when the connection itself drops (network error or
+  // server closed the stream). Only surface it when no named error arrived.
   es.onerror = () => {
+    if (namedErrorReceived) return;
     es.close();
     callbacks.onError('Lost connection to backend');
   };
