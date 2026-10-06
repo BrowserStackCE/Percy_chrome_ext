@@ -8,8 +8,8 @@ const isBrowserStack = !!process.env.BROWSERSTACK_USERNAME;
 
 module.exports = defineConfig({
   testDir: './specs',
-  // 3 minutes on BrowserStack (Percy CLI startup can take 60-90s), 30s locally
-  timeout: isBrowserStack ? 180_000 : 30_000,
+  // 3 minutes on BrowserStack or CI with PERCY_TOKEN (Percy CLI startup can take 90s+), 30s locally
+  timeout: (isBrowserStack || process.env.CI) ? 180_000 : 30_000,
   // Always retry twice on BrowserStack (flaky network); once locally in CI
   retries: isBrowserStack ? 2 : (process.env.CI ? 1 : 0),
   reporter: [['list'], ['html', { open: 'never' }]],

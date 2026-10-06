@@ -89,7 +89,7 @@ test.describe('Snapshot lifecycle (E2E)', () => {
   // Percy CLI install + build finalization can take up to 2 minutes on first run.
   // Skipped automatically in CI when PERCY_TOKEN is not set.
   test('Step 7 — finalize build (requires PERCY_TOKEN)', async ({ request }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(180_000);
     test.skip(!PERCY_TOKEN, 'PERCY_TOKEN not set — skipping finalize build test');
 
     // Re-create a snapshot so there is something to finalize
