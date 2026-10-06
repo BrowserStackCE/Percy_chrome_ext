@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   deleteSnapshot,
   getSnapshots,
+  getLibraryToken,
 } from '../services/backendApi';
 import { SnapshotRow } from '../components/SnapshotRow';
 import { FinalizeBuildPanel } from '../components/FinalizeBuildPanel';
@@ -48,6 +49,9 @@ export function SnapshotsPage() {
 
   useEffect(() => {
     refresh();
+    getLibraryToken()
+      .then((t) => setToken(t))
+      .catch(() => {/* backend offline — token stays empty */});
   }, []);
 
   return (
@@ -133,21 +137,6 @@ export function SnapshotsPage() {
             </table>
           </div>
         )}
-
-        <div className="token-section">
-          <label htmlFor="percy-token">
-            Percy Token
-          </label>
-
-          <input
-            id="percy-token"
-            type="password"
-            className="input"
-            placeholder="Enter Percy Token"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-          />
-        </div>
 
         <div className="page-actions">
           <ClearSnapshotsButton

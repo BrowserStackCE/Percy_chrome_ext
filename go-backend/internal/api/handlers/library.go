@@ -60,6 +60,16 @@ func(h *LibraryHandler) Search(w http.ResponseWriter ,r *http.Request) {
 	)
 }
 
+func (h *LibraryHandler) GetToken(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{
+		"token": h.app.LibraryService.GetToken(),
+	})
+}
+
 func (h *LibraryHandler) Status(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

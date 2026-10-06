@@ -70,8 +70,18 @@ func (s *Server) routes() {
 })
 
 	s.mux.HandleFunc("/build/finalize", buildHandler.Finalize)
+	s.mux.HandleFunc("/build/finalize/stream", buildHandler.FinalizeStream)
 
-	s.mux.HandleFunc("/library/token" ,libraryHandler.SetToken)
+	s.mux.HandleFunc("/library/token", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			libraryHandler.GetToken(w, r)
+		case http.MethodPost:
+			libraryHandler.SetToken(w, r)
+		default:
+			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		}
+	})
 	s.mux.HandleFunc("/library/search", libraryHandler.Search)		
 	s.mux.HandleFunc("/library/status", libraryHandler.Status)
 	s.mux.HandleFunc("/library/all", libraryHandler.All)

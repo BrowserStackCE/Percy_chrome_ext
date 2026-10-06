@@ -26,6 +26,26 @@ func NewController(binary *Binary, installer *Installer) *Controller {
 	}
 }
 
+// errorPatterns are substrings in Percy CLI output that indicate a fatal
+// startup failure. When any of these appear we surface the line as an error
+// rather than waiting forever for "Percy has started".
+var errorPatterns = []string{
+	"already running",
+	"port already in use",
+	"Port already in use",
+	"Error:",
+	"Failure:",
+}
+
+func isErrorLine(line string) bool {
+	for _, p := range errorPatterns {
+		if strings.Contains(line, p) {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *Controller) Start(token string) error {
 	log.Println("[percy] Start() called")
 	log.Printf("[percy] executable: %s", c.binary.Path)
@@ -75,11 +95,20 @@ func (c *Controller) Start(token string) error {
 
 			if strings.Contains(line, "Percy has started") {
 				log.Println("[percy] Percy is ready")
-
 				select {
 				case ready <- nil:
 				default:
 				}
+				return
+			}
+
+			if isErrorLine(line) {
+				log.Printf("[percy] detected error line: %s", line)
+				select {
+				case ready <- fmt.Errorf("Percy CLI error: %s", line):
+				default:
+				}
+				return
 			}
 		}
 
@@ -88,7 +117,25 @@ func (c *Controller) Start(token string) error {
 			case ready <- err:
 			default:
 			}
+			return
 		}
+
+		// Scanner finished (EOF) without seeing a ready or error line.
+		// Wait for the process exit code and surface it.
+		go func() {
+			exitErr := c.cmd.Wait()
+			if exitErr != nil {
+				select {
+				case ready <- fmt.Errorf("Percy CLI exited unexpectedly: %w", exitErr):
+				default:
+				}
+			} else {
+				select {
+				case ready <- errors.New("Percy CLI exited before signalling ready"):
+				default:
+				}
+			}
+		}()
 	}
 
 	go readOutput(stdout)

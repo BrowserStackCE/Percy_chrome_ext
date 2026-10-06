@@ -25,15 +25,15 @@ export function LibraryTokenPanel() {
 
   return (
     <div className="panel">
-      <span className="panel__eyebrow">Library Token</span>
+      <span className="panel__eyebrow">Percy Token</span>
       <label className="field-label" htmlFor="library-token">
-        Percy read token (for snapshot search)
+        Percy token (full access)
       </label>
       <input
         id="library-token"
         className="text-input"
         type="password"
-        placeholder="Read-only token"
+        placeholder="Full access token"
         value={token}
         onChange={(e) => setToken(e.target.value)}
         disabled={isSaving}

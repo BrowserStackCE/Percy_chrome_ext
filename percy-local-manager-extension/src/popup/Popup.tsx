@@ -14,11 +14,11 @@ export function Popup() {
   const connectionStatus = useConnectionStatus();
   const queue = useSnapshotQueue();
 
+  const isBackendOffline = connectionStatus === 'offline';
+
   const [libraryQuery, setLibraryQuery] = useState('');
 
   const { results, isSearching } = useLibrarySearch(libraryQuery);
-
-  const isBackendOffline = connectionStatus === 'offline';
 
   function openLibrary(ref?: LibrarySnapshotReference) {
     const url = new URL(
@@ -84,7 +84,7 @@ export function Popup() {
             onChange={(event) =>
               setLibraryQuery(event.target.value)
             }
-            disabled={isBackendOffline}
+          disabled={isBackendOffline}
           />
 
           {libraryQuery.trim() !== '' && (
@@ -98,7 +98,7 @@ export function Popup() {
             type="button"
             className="button button--link"
             onClick={() => openLibrary()}
-            disabled={isBackendOffline}
+          disabled={isBackendOffline}
           >
             Browse full library →
           </button>

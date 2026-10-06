@@ -89,6 +89,59 @@ const data = await parseJsonOrThrow(response);
 return data as FinalizeBuildResponse;
 }
 
+export interface FinalizeStreamCallbacks {
+  onProgress: (msg: string) => void;
+  onDone: (result: FinalizeBuildResponse) => void;
+  onError: (msg: string) => void;
+}
+
+/**
+ * Opens an SSE connection to /build/finalize/stream and calls the provided
+ * callbacks as events arrive. Returns a cleanup function that closes the
+ * EventSource when called.
+ */
+export function finalizeBuildStream(
+  token: string,
+  callbacks: FinalizeStreamCallbacks
+): () => void {
+  const url = `${ENDPOINTS.FINALIZE_BUILD}/stream?token=${encodeURIComponent(token)}`;
+  const es = new EventSource(url);
+
+  es.addEventListener('progress', (e) => {
+    callbacks.onProgress((e as MessageEvent).data);
+  });
+
+  es.addEventListener('done', (e) => {
+    es.close();
+    try {
+      const result = JSON.parse((e as MessageEvent).data) as FinalizeBuildResponse;
+      callbacks.onDone(result);
+    } catch {
+      callbacks.onError('Received malformed completion event');
+    }
+  });
+
+  es.addEventListener('error', (e) => {
+    es.close();
+    const msg = (e as MessageEvent).data ?? 'Connection lost';
+    callbacks.onError(msg);
+  });
+
+  // Generic onerror fires when the connection itself drops
+  es.onerror = () => {
+    es.close();
+    callbacks.onError('Lost connection to backend');
+  };
+
+  return () => es.close();
+}
+
+export async function getLibraryToken(): Promise<string> {
+  const response = await fetch(ENDPOINTS.LIBRARY_TOKEN, { method: 'GET' });
+  const data = await parseJsonOrThrow(response);
+  return (data as { token: string }).token ?? '';
+}
+
 export async function setLibraryToken(token: string): Promise<void> {
   const response = await fetch(ENDPOINTS.LIBRARY_TOKEN, {
     method: 'POST',

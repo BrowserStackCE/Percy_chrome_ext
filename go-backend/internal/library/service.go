@@ -116,6 +116,16 @@ type Status struct {
 	Count     int  `json:"count"`
 }
 
+// GetToken returns the currently stored token, or an empty string if none is set.
+func (s *Service) GetToken() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.client == nil {
+		return ""
+	}
+	return s.client.token
+}
+
 func (s *Service) Status() Status {
 	all := s.cache.All()
 	s.mu.Lock()
