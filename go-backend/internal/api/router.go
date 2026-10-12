@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/jostan30/Percy_chrome_ext/go-backend/internal/api/handlers"
 	"github.com/jostan30/Percy_chrome_ext/go-backend/internal/middleware"
@@ -70,6 +71,7 @@ func (s *Server) routes() {
 })
 
 	s.mux.HandleFunc("/build/finalize", buildHandler.Finalize)
+	s.mux.HandleFunc("/build/status", buildHandler.Status)
 
 	s.mux.HandleFunc("/library/token" ,libraryHandler.SetToken)
 	s.mux.HandleFunc("/library/search", libraryHandler.Search)		
@@ -85,6 +87,11 @@ func (s *Server) Start() error {
 		middleware.Logger,
 		middleware.CORS,
 	)
-	return http.ListenAndServe(s.addr ,handler)
+	srv := &http.Server{
+		Addr:              s.addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	return srv.ListenAndServe()
 }
 

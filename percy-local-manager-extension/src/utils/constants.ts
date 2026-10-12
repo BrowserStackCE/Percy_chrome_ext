@@ -5,6 +5,7 @@ export const BACKEND_BASE_URL = 'http://localhost:4321';
 export const ENDPOINTS = {
   SNAPSHOTS: `${BACKEND_BASE_URL}/snapshots`,
   FINALIZE_BUILD: `${BACKEND_BASE_URL}/build/finalize`,
+  BUILD_STATUS: `${BACKEND_BASE_URL}/build/status`,
   HEALTH: `${BACKEND_BASE_URL}/health`,
   LIBRARY_TOKEN: `${BACKEND_BASE_URL}/library/token`,
   LIBRARY_SEARCH: `${BACKEND_BASE_URL}/library/search`, 
