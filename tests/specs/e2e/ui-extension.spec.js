@@ -130,7 +130,8 @@ test.describe('Extension UI (popup pages via Vite dev server)', () => {
   });
 
   test('Popup: snapshot name input accepts text', async () => {
-    await goTo('index.html');
+    // The input is disabled while the backend is offline, so mock /health as healthy
+    await goToConnectedPopup();
     // CaptureSnapshotPanel renders <input id="snapshot-name" placeholder="Defaults to page title">
     const nameInput = page.locator('#snapshot-name');
     await nameInput.fill('My Test Snapshot');
@@ -179,5 +180,135 @@ test.describe('Extension UI (popup pages via Vite dev server)', () => {
     // SnapshotsPage renders <TokenRequiredNotice role="alert"> and no #percy-token input
     await expect(page.getByRole('alert').filter({ hasText: 'A Percy token is required to finalize a build' })).toBeVisible();
     await expect(page.locator('#percy-token')).toHaveCount(0);
+  });
+
+  test('Snapshots: Snapshot Queue heading is visible', async () => {
+    await goTo('snapshots.html');
+    // SnapshotsPage renders <h1>Snapshot Queue</h1>
+    await expect(page.getByRole('heading', { name: 'Snapshot Queue' })).toBeVisible();
+  });
+
+  test('Snapshots: Finalize Build button is present and disabled when no token is saved', async () => {
+    await goTo('snapshots.html');
+    // FinalizeBuildPanel renders <button>Finalize Build</button>, disabled without a token / snapshots
+    const finalizeBtn = page.getByRole('button', { name: 'Finalize Build' });
+    await expect(finalizeBtn).toBeVisible();
+    await expect(finalizeBtn).toBeDisabled();
+  });
+
+  test('Snapshots: Clear Snapshots button is present', async () => {
+    await goTo('snapshots.html');
+    // ClearSnapshotsButton renders <button class="button button--danger">Clear Snapshots</button>
+    await expect(page.getByRole('button', { name: 'Clear Snapshots' })).toBeVisible();
+  });
+
+  test('Snapshots: build progress card is hidden before a build is started', async () => {
+    await goTo('snapshots.html');
+    // BuildProgress renders <section aria-label="Build progress"> only once a build exists
+    await expect(page.getByRole('region', { name: 'Build progress' })).toHaveCount(0);
+  });
+
+  test('Snapshots: failed build with an incorrect token shows the Build failed alert with the error', async () => {
+    const ERROR_TEXT = 'invalid or missing token';
+    const cors = { 'Access-Control-Allow-Origin': '*' };
+    const json = (body, status = 200) => ({
+      status,
+      contentType: 'application/json',
+      headers: cors,
+      body: JSON.stringify(body),
+    });
+
+    // Seed a token so Finalize Build is enabled (key: percyToken, see tokenStorage.ts)
+    await page.addInitScript(() => {
+      window.chrome.storage.local.set({ percyToken: 'incorrect-token' });
+    });
+    await page.route('**/snapshots', (route) =>
+      route.request().method() === 'GET'
+        ? route.fulfill(json([{ id: 's1', name: 'Home', url: 'http://localhost/', widths: [1280], minHeight: 1024, createdAt: '2026-01-01T00:00:00Z' }]))
+        : route.fallback()
+    );
+    await page.route('**/build/finalize', (route) => route.fulfill(json({ status: 'running' }, 202)));
+    await page.route('**/build/status', (route) =>
+      route.fulfill(json({
+        status: 'failed',
+        phase: 'starting',
+        total: 1,
+        sent: 0,
+        snapshots: [{ id: 's1', name: 'Home', state: 'failed', error: ERROR_TEXT }],
+        logs: [{ ts: '2026-01-01T00:00:00Z', level: 'error', line: ERROR_TEXT }],
+        error: ERROR_TEXT,
+      }))
+    );
+
+    try {
+      await goTo('snapshots.html');
+      await page.getByRole('button', { name: 'Finalize Build' }).click();
+
+      const card = page.getByRole('region', { name: 'Build progress' });
+      await expect(card).toBeVisible();
+      await expect(card.getByRole('alert')).toContainText('Build failed');
+      await expect(card.getByRole('alert')).toContainText(ERROR_TEXT);
+      await expect(card.getByText('Failed', { exact: true })).toBeVisible();
+      await expect(page.getByText('✓ Build finished')).toHaveCount(0);
+    } finally {
+      await page.unroute('**/snapshots');
+      await page.unroute('**/build/finalize');
+      await page.unroute('**/build/status');
+    }
+  });
+
+  // ----------------------------------------------------------------
+  // Popup — advanced snapshot options
+  // ----------------------------------------------------------------
+
+  // The advanced-options controls are disabled while the popup reports the
+  // backend as offline, so mock GET /health as healthy for these tests.
+  async function goToConnectedPopup() {
+    await page.route('**/health', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ status: 'ok' }),
+      })
+    );
+    await goTo('index.html');
+    await expect(page.locator('.connection-status--connected')).toBeVisible();
+  }
+
+  test.afterEach(async () => {
+    await page.unroute('**/health');
+  });
+
+  test('Popup: Advanced snapshot options toggle reveals capture fields', async () => {
+    await goToConnectedPopup();
+    await page.getByRole('button', { name: /Advanced snapshot options/ }).click();
+    await expect(page.locator('#snapshot-min-height')).toHaveValue('1024');
+    await expect(page.locator('#snapshot-scope')).toBeVisible();
+    await expect(page.locator('#percy-css')).toBeVisible();
+    await expect(page.getByLabel('Enable JavaScript')).toBeVisible();
+    await expect(page.getByRole('button', { name: '+ Add width' })).toBeVisible();
+  });
+
+  test('Popup: widths can be added and removed', async () => {
+    await goToConnectedPopup();
+    await page.getByRole('button', { name: /Advanced snapshot options/ }).click();
+    const rows = page.locator('.width-row');
+    await expect(rows).toHaveCount(2);
+    await page.getByRole('button', { name: '+ Add width' }).click();
+    await expect(rows).toHaveCount(3);
+    await rows.last().getByRole('button', { name: '×' }).click();
+    await expect(rows).toHaveCount(2);
+    await rows.last().getByRole('button', { name: '×' }).click();
+    await expect(rows).toHaveCount(1);
+    // the last remaining width cannot be removed
+    await expect(rows.first().getByRole('button', { name: '×' })).toBeDisabled();
+  });
+
+  test('Popup: Capture Snapshot is disabled when a width is 0', async () => {
+    await goToConnectedPopup();
+    await page.getByRole('button', { name: /Advanced snapshot options/ }).click();
+    await page.locator('.width-row input').first().fill('0');
+    await expect(page.getByRole('button', { name: 'Capture Snapshot' })).toBeDisabled();
   });
 });
