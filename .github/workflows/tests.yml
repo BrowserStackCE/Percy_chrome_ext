@@ -2,9 +2,7 @@ name: Percy Local Manager — Tests & Release
 
 on:
   push:
-    branches: [main]
   pull_request:
-    branches: [main]
 
 jobs:
   # ============================================================
@@ -117,13 +115,10 @@ jobs:
   # ============================================================
   test-browserstack:
     name: BrowserStack Automate (Mac + Windows)
-    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    # Only run on push to main (not on PRs) — requires BrowserStack secrets to be set
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-
+  
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
