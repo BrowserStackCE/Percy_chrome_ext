@@ -22,6 +22,7 @@ const { EXTENSION_DEV_URL, CHROME_RUNTIME_POLYFILL } = require('../../helpers/ch
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:4321';
 const PERCY_TOKEN = process.env.PERCY_TOKEN;
 const SNAPSHOT_NAME = 'UI Real Finalize Snapshot';
+const SNAPSHOT_NAMES = [SNAPSHOT_NAME, `${SNAPSHOT_NAME} 2`, `${SNAPSHOT_NAME} 3`];
 
 test.describe('Finalize build — valid token (real backend, UI)', () => {
   test('finalizing a build with a valid token shows Build finished', async ({ browser, request }) => {
@@ -45,16 +46,26 @@ test.describe('Finalize build — valid token (real backend, UI)', () => {
       })
       .not.toBe('running');
 
-    const created = await request.post(`${BACKEND_URL}/snapshots`, {
-      data: {
-        name: SNAPSHOT_NAME,
-        url: 'https://example.com',
-        dom: '<!DOCTYPE html><html><head><title>UI E2E</title></head><body><h1>UI E2E</h1></body></html>',
-        widths: [1280],
-        minHeight: 600,
-      },
-    });
-    expect(created.status()).toBe(201);
+    // Seed several snapshots through the real backend API
+    for (const name of SNAPSHOT_NAMES) {
+      const created = await request.post(`${BACKEND_URL}/snapshots`, {
+        data: {
+          name,
+          url: 'https://example.com',
+          dom: `<!DOCTYPE html><html><head><title>UI E2E</title></head><body><h1>${name}</h1></body></html>`,
+          widths: [1280],
+          minHeight: 600,
+        },
+      });
+      expect(created.status()).toBe(201);
+    }
+
+    // Confirm the queue really holds the seeded snapshots before opening the UI
+    await expect
+      .poll(async () => (await (await request.get(`${BACKEND_URL}/snapshots`)).json()).map((s) => s.name), {
+        timeout: 10_000,
+      })
+      .toEqual(expect.arrayContaining(SNAPSHOT_NAMES));
 
     const page = await browser.newPage();
     try {
@@ -65,7 +76,16 @@ test.describe('Finalize build — valid token (real backend, UI)', () => {
       }, PERCY_TOKEN);
 
       await page.goto(`${EXTENSION_DEV_URL}/snapshots.html`);
-      await expect(page.getByText(SNAPSHOT_NAME)).toBeVisible();
+      // Scope to the queue table: the build progress card repeats snapshot names
+      const queueTable = page.locator('.snapshot-table');
+      const firstRow = queueTable.getByText(SNAPSHOT_NAME, { exact: true });
+      // Reload once if the page rendered before the queue was readable
+      if (!(await firstRow.isVisible({ timeout: 5_000 }).catch(() => false))) {
+        await page.reload();
+      }
+      for (const name of SNAPSHOT_NAMES) {
+        await expect(queueTable.getByText(name, { exact: true })).toBeVisible();
+      }
 
       const finalizeBtn = page.getByRole('button', { name: 'Finalize Build' });
       await expect(finalizeBtn).toBeEnabled();
