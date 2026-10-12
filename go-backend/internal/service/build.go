@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -8,41 +9,69 @@ import (
 	"github.com/jostan30/Percy_chrome_ext/go-backend/internal/percy"
 )
 
+// ErrBuildRunning is returned when a build is already in progress.
+var ErrBuildRunning = errors.New("a build is already running")
+
 type BuildService struct {
 	percy    *percy.Controller
 	client   *percy.Client
 	snapshot *SnapshotService
-}
-type BuildResult struct {
-	BuildID  string
-	BuildURL string
+	job      *BuildJob
 }
 
 func NewBuildService(controller *percy.Controller, client *percy.Client, snapshot *SnapshotService) *BuildService {
-	return &BuildService{
+	s := &BuildService{
 		percy:    controller,
 		client:   client,
 		snapshot: snapshot,
+		job:      NewBuildJob(),
 	}
+	controller.SetLogSink(s.job.AddLog)
+	return s
 }
 
-func (s *BuildService) Finalize(token string) (*BuildResult, error) {
+// Status returns the current build job state.
+func (s *BuildService) Status() BuildStatus {
+	return s.job.Snapshot()
+}
 
+// StartFinalize validates, then runs the build in the background.
+func (s *BuildService) StartFinalize(token string) error {
+	snapshots := s.snapshot.List()
+	if len(snapshots) == 0 {
+		return fmt.Errorf("no snapshots available")
+	}
+
+	progress := make([]SnapshotProgress, len(snapshots))
+	for i, snap := range snapshots {
+		progress[i] = SnapshotProgress{ID: snap.ID, Name: snap.Name, State: SnapPending}
+	}
+	if !s.job.Start(progress) {
+		return ErrBuildRunning
+	}
+
+	go func() {
+		if err := s.run(token); err != nil {
+			log.Printf("[build] failed: %v", err)
+			s.job.AddLog("Build failed: " + err.Error())
+			s.job.Fail(err)
+		}
+	}()
+	return nil
+}
+
+func (s *BuildService) run(token string) error {
 	snapshots := s.snapshot.List()
 
-	if len(snapshots) == 0 {
-		return nil, fmt.Errorf("no snapshots available")
-	}
-
+	s.job.SetPhase(PhaseInstalling)
 	if err := s.percy.EnsureReady(); err != nil {
-		return nil, err
+		return err
 	}
-
 	log.Println("[build] Percy runtime ready")
-	log.Println("[build] Starting Percy exec:start...")
 
+	s.job.SetPhase(PhaseStarting)
 	if err := s.percy.Start(token); err != nil {
-		return nil, err
+		return err
 	}
 
 	// Always stop Percy, on success or failure.
@@ -54,40 +83,31 @@ func (s *BuildService) Finalize(token string) (*BuildResult, error) {
 
 	health, err := s.client.Health()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
+	s.job.SetPhase(PhaseUploading)
 	for i, snap := range snapshots {
-
-		fmt.Printf(
-			"Uploading %d/%d: %s\n",
-			i+1,
-			len(snapshots),
-			snap.Name,
-		)
+		s.job.SetSnapshot(i, SnapSending, "")
+		s.job.AddLog(fmt.Sprintf("Uploading %d/%d: %s", i+1, len(snapshots), snap.Name))
 
 		if err := s.client.Snapshot(snap); err != nil {
-			return nil, err
+			s.job.SetSnapshot(i, SnapFailed, err.Error())
+			return fmt.Errorf("snapshot %q failed: %w", snap.Name, err)
 		}
 
-		fmt.Printf(
-			"✓ Sent %d/%d\n",
-			i+1,
-			len(snapshots),
-		)
+		s.job.SetSnapshot(i, SnapSent, "")
+		s.job.AddLog(fmt.Sprintf("Sent %d/%d", i+1, len(snapshots)))
 	}
 
 	// Wait until Percy has processed every queued snapshot (or exits/times out).
+	s.job.SetPhase(PhaseProcessing)
 	if err := s.client.WaitIdle(5*time.Minute, s.percy.Exited()); err != nil {
-		return nil, err
+		return err
 	}
 
 	s.snapshot.Clear()
-
-	fmt.Println("Percy finished processing snapshots")
-
-	return &BuildResult{
-		BuildID:  health.Build.ID,
-		BuildURL: health.Build.URL,
-	}, nil
+	s.job.AddLog("Percy finished processing snapshots")
+	s.job.Succeed(health.Build.ID, health.Build.URL)
+	return nil
 }

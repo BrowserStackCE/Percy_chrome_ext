@@ -51,6 +51,44 @@ export interface FinalizeBuildResponse {
   buildUrl: string;
 }
 
+export type BuildRunStatus = 'idle' | 'running' | 'success' | 'failed';
+export type BuildPhase =
+  | 'installing'
+  | 'starting'
+  | 'uploading'
+  | 'processing'
+  | 'done';
+export type SnapshotUploadState = 'pending' | 'sending' | 'sent' | 'failed';
+export type BuildLogLevel = 'info' | 'warn' | 'error';
+
+export interface BuildLogEntry {
+  ts: string;
+  level: BuildLogLevel;
+  line: string;
+}
+
+export interface SnapshotProgress {
+  id: string;
+  name: string;
+  state: SnapshotUploadState;
+  error?: string;
+}
+
+/**
+ * Response from GET /build/status.
+ */
+export interface BuildStatus {
+  status: BuildRunStatus;
+  phase?: BuildPhase;
+  total: number;
+  sent: number;
+  snapshots: SnapshotProgress[];
+  logs: BuildLogEntry[];
+  error?: string;
+  buildId?: string;
+  buildUrl?: string;
+}
+
 
 /**
  * Connection status against GET /health.

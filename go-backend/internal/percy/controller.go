@@ -25,6 +25,8 @@ type Controller struct {
 	mu    sync.Mutex
 	cmd   *exec.Cmd
 	token string
+	// logSink, when set, receives every line of Percy CLI output.
+	logSink func(line string)
 	// exited is closed when the running percy process exits.
 	exited chan struct{}
 }
@@ -33,6 +35,22 @@ func NewController(binary *Binary, installer *Installer) *Controller {
 	return &Controller{
 		binary:    binary,
 		installer: installer,
+	}
+}
+
+// SetLogSink registers a callback that receives each Percy CLI output line.
+func (c *Controller) SetLogSink(sink func(line string)) {
+	c.mu.Lock()
+	c.logSink = sink
+	c.mu.Unlock()
+}
+
+func (c *Controller) emitLog(line string) {
+	c.mu.Lock()
+	sink := c.logSink
+	c.mu.Unlock()
+	if sink != nil {
+		sink(line)
 	}
 }
 
@@ -85,6 +103,7 @@ func (c *Controller) Start(token string) error {
 		for scanner.Scan() {
 			line := scanner.Text()
 			log.Printf("[percy-cli] %s", line)
+			c.emitLog(line)
 			if strings.Contains(line, "Percy has started") {
 				readyOnce.Do(func() { close(ready) })
 			}

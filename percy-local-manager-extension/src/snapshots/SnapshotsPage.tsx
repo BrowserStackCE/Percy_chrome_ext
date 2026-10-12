@@ -18,6 +18,8 @@ export function SnapshotsPage() {
   const { token, hasToken, isLoading: isTokenLoading } = useToken();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editingSnapshot, setEditingSnapshot] = useState<Snapshot | null>(null);
+  // Slot (after the action bar) where the build progress card is rendered.
+  const [progressHost, setProgressHost] = useState<HTMLDivElement | null>(null);
 
   async function refresh() {
     setLoading(true);
@@ -153,8 +155,11 @@ export function SnapshotsPage() {
               !hasToken
             }
             onFinalized={refresh}
+            progressHost={progressHost}
           />
         </div>
+
+        <div className="build-progress-slot" ref={setProgressHost} />
       </main>
       {editingSnapshot && (
         <EditSnapshotPanel
