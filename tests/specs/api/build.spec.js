@@ -45,6 +45,16 @@ test.describe('Build endpoints', () => {
     });
     expect(snap.ok()).toBe(true);
 
+    // The backend runs ONE build job at a time (409 if one is running). Wait for
+    // any in-flight build (e.g. a retry of an earlier attempt) to finish first;
+    // `workers: 1` in playwright.config.js keeps other tests from racing this.
+    await expect
+      .poll(async () => (await (await request.get('/build/status')).json()).status, {
+        timeout: 200_000,
+        intervals: [1000],
+      })
+      .not.toBe('running');
+
     const start = await request.post('/build/finalize', { data: { token: 'invalid-token' } });
     expect(start.status()).toBe(202);
     expect((await start.json()).status).toBe('running');

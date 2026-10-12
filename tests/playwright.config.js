@@ -12,6 +12,10 @@ module.exports = defineConfig({
   timeout: isBrowserStack ? 180_000 : 30_000,
   // Always retry twice on BrowserStack (flaky network); once locally in CI
   retries: isBrowserStack ? 2 : (process.env.CI ? 1 : 0),
+  // The Go backend is shared state: one global build job (409 if a second
+  // finalize starts) and one snapshot queue. Run tests one at a time so build
+  // tests never race each other or clear the queue mid-run.
+  workers: 1,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: process.env.BACKEND_URL || 'http://localhost:4321',

@@ -20,6 +20,21 @@ const SNAPSHOT_PAYLOAD = {
   minHeight: 600,
 };
 
+// The backend runs ONE build job at a time and rejects a second start with 409.
+// Wait until no build is running, then start. The `build` project in
+// playwright.config.js runs the build-starting tests serially in one worker so
+// no other test races this check or clears the shared snapshot queue
+// (`workers: 1` in playwright.config.js serializes the whole run).
+async function startFinalize(request, token) {
+  await expect
+    .poll(async () => (await (await request.get('/build/status')).json()).status, {
+      timeout: 200_000,
+      intervals: [1000],
+    })
+    .not.toBe('running');
+  return request.post('/build/finalize', { data: { token } });
+}
+
 test.describe('Snapshot lifecycle (E2E)', () => {
   let snapshotId;
 
@@ -98,9 +113,7 @@ test.describe('Snapshot lifecycle (E2E)', () => {
     const createRes = await request.post('/snapshots', { data: SNAPSHOT_PAYLOAD });
     expect(createRes.status()).toBe(201);
 
-    const res = await request.post('/build/finalize', {
-      data: { token: PERCY_TOKEN },
-    });
+    const res = await startFinalize(request, PERCY_TOKEN);
     expect(res.status()).toBe(202);
     expect((await res.json()).status).toBe('running');
 
@@ -127,9 +140,7 @@ test.describe('Snapshot lifecycle (E2E)', () => {
     const createRes = await request.post('/snapshots', { data: SNAPSHOT_PAYLOAD });
     expect(createRes.status()).toBe(201);
 
-    const res = await request.post('/build/finalize', {
-      data: { token: 'incorrect-token' },
-    });
+    const res = await startFinalize(request, 'incorrect-token');
     expect(res.status()).toBe(202);
     expect((await res.json()).status).toBe('running');
 
