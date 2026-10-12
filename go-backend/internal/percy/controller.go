@@ -62,6 +62,8 @@ func (c *Controller) Start(token string) error {
 		return errors.New("percy cli not installed")
 	}
 
+	// Path is derived from the server's own executable location (see NewBinary), never from user input.
+	// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command
 	cmd := exec.Command(c.binary.Path, "exec:start")
 	cmd.Env = append(
 		os.Environ(),
@@ -145,6 +147,8 @@ func (c *Controller) Stop() error {
 		return nil
 	}
 
+	// Path is derived from the server's own executable location (see NewBinary), never from user input.
+	// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command
 	stop := exec.Command(c.binary.Path, "exec:stop")
 	stop.Env = append(os.Environ(), "PERCY_TOKEN="+token)
 	if out, err := stop.CombinedOutput(); err != nil {

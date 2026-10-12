@@ -18,10 +18,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: '1.21'
 
@@ -44,7 +44,7 @@ jobs:
           done
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
           cache: 'npm'
@@ -99,7 +99,7 @@ jobs:
 
       - name: Upload Playwright report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: playwright-report
           path: tests/playwright-report/
@@ -129,20 +129,23 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # Both platform jobs derive the SAME build number from the workflow run
       # (run_number + run_attempt), so OS X and Windows report into ONE build.
       - name: Generate build number and write it to browserstack.macos.yml
         working-directory: tests
+        env:
+          RUN_NUMBER: ${{ github.run_number }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
-          BUILD_NUMBER="${{ github.run_number }}.${{ github.run_attempt }}"
+          BUILD_NUMBER="${RUN_NUMBER}.${RUN_ATTEMPT}"
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
           sed -i "s|^buildIdentifier:.*|buildIdentifier: '#${BUILD_NUMBER}'|" browserstack.macos.yml
           grep -n '^buildName\|^buildIdentifier' browserstack.macos.yml
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: '1.21'
 
@@ -165,7 +168,7 @@ jobs:
           done
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
           cache: 'npm'
@@ -215,7 +218,7 @@ jobs:
 
       - name: Upload BrowserStack Playwright report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: browserstack-playwright-report-macos
           path: tests/playwright-report/
@@ -235,19 +238,22 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # Same derivation as the OS X job, so both land in the same build.
       - name: Generate build number and write it to browserstack.windows.yml
         working-directory: tests
+        env:
+          RUN_NUMBER: ${{ github.run_number }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
-          BUILD_NUMBER="${{ github.run_number }}.${{ github.run_attempt }}"
+          BUILD_NUMBER="${RUN_NUMBER}.${RUN_ATTEMPT}"
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
           sed -i "s|^buildIdentifier:.*|buildIdentifier: '#${BUILD_NUMBER}'|" browserstack.windows.yml
           grep -n '^buildName\|^buildIdentifier' browserstack.windows.yml
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: '1.21'
 
@@ -270,7 +276,7 @@ jobs:
           done
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
           cache: 'npm'
@@ -320,7 +326,7 @@ jobs:
 
       - name: Upload BrowserStack Playwright report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: browserstack-playwright-report-windows
           path: tests/playwright-report/
