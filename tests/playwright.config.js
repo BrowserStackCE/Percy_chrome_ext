@@ -35,7 +35,7 @@ module.exports = defineConfig({
     },
     {
       name: 'extension-ui',
-      testMatch: ['**/e2e/ui-extension.spec.js'],
+      testMatch: ['**/e2e/ui-extension.spec.js', '**/e2e/finalize-build.spec.js'],
       // Extension tests launch their own browser via chromium.launchPersistentContext
       // so no browser is configured here — the test manages its own context.
     },

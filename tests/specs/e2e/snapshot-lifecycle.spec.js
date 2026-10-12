@@ -107,7 +107,15 @@ test.describe('Snapshot lifecycle (E2E)', () => {
   // Skipped automatically in CI when PERCY_TOKEN is not set.
   test('Step 7 — finalize build (requires PERCY_TOKEN)', async ({ request }) => {
     test.setTimeout(240_000);
-    test.skip(!PERCY_TOKEN, 'PERCY_TOKEN not set — skipping finalize build test');
+    // Record WHY this test is skipped so it shows up in the HTML report and the
+    // BrowserStack/Automate reporter instead of passing silently.
+    if (!PERCY_TOKEN) {
+      test.info().annotations.push({
+        type: 'skip-reason',
+        description: 'PERCY_TOKEN not found — set the PERCY_TOKEN env var / repo secret to run the real finalize-build test',
+      });
+    }
+    test.skip(!PERCY_TOKEN, 'PERCY_TOKEN not found — skipping finalize build test');
 
     // Re-create a snapshot so there is something to finalize
     const createRes = await request.post('/snapshots', { data: SNAPSHOT_PAYLOAD });

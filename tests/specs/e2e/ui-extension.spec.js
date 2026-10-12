@@ -257,6 +257,8 @@ test.describe('Extension UI (popup pages via Vite dev server)', () => {
     }
   });
 
+  // The positive scenario (valid token, real backend) lives in finalize-build.spec.js.
+
   // ----------------------------------------------------------------
   // Popup — advanced snapshot options
   // ----------------------------------------------------------------
