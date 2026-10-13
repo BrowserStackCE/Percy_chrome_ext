@@ -4,3 +4,7 @@ server
 
 # Test Companion onboarding (local, per-machine)
 .test-companion/
+
+# Workflow runtime data (Playwright, workflows, builds, artifacts)
+/runtime/
+/cmd/server/runtime/

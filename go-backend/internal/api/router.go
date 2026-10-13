@@ -32,6 +32,8 @@ func (s *Server) routes() {
 	snapshotHandler := handlers.NewSnapshotHandler(s.app)
 	buildHandler := handlers.NewBuildHandler(s.app)
 	libraryHandler := handlers.NewLibraryHandler(s.app)
+	workflowHandler := handlers.NewWorkflowHandler(s.app)
+	runsHandler := handlers.NewRunsHandler(s.app)
 
 	s.mux.HandleFunc("/health" , handlers.Health)
 	s.mux.HandleFunc("/status" , handlers.Status)
@@ -77,6 +79,11 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/library/search", libraryHandler.Search)		
 	s.mux.HandleFunc("/library/status", libraryHandler.Status)
 	s.mux.HandleFunc("/library/all", libraryHandler.All)
+
+	s.mux.HandleFunc("/api/workflows", workflowHandler.Collection)
+	s.mux.HandleFunc("/api/workflows/", workflowHandler.Item)
+	s.mux.HandleFunc("/api/builds", runsHandler.Builds)
+	s.mux.HandleFunc("/api/builds/", runsHandler.Build)
 	
 }
 

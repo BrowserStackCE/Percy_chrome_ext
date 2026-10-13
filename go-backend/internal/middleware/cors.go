@@ -7,7 +7,7 @@ func CORS(next http.Handler)http.Handler {
 
 		// nosemgrep: local-only backend (localhost:4321) called by the browser extension; wildcard origin is intentional
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Idempotency-Key")
 		w.Header().Set("Access-Control-Allow-Methods","GET, POST, PUT, DELETE, OPTIONS")	
 		
 		if r.Method == http.MethodOptions {

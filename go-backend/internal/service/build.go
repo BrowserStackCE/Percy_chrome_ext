@@ -17,7 +17,17 @@ type BuildService struct {
 	client   *percy.Client
 	snapshot *SnapshotService
 	job      *BuildJob
+
+	// externalBusy, when set, reports another user of the single Percy process
+	// (e.g. a workflow run). Finalize refuses to start while it returns true.
+	externalBusy func() bool
 }
+
+// SetExternalBusy registers a check for other users of the Percy process.
+func (s *BuildService) SetExternalBusy(fn func() bool) { s.externalBusy = fn }
+
+// Running reports whether a finalize build is in progress.
+func (s *BuildService) Running() bool { return s.job.Snapshot().Status == StatusRunning }
 
 func NewBuildService(controller *percy.Controller, client *percy.Client, snapshot *SnapshotService) *BuildService {
 	s := &BuildService{
@@ -37,6 +47,9 @@ func (s *BuildService) Status() BuildStatus {
 
 // StartFinalize validates, then runs the build in the background.
 func (s *BuildService) StartFinalize(token string) error {
+	if s.externalBusy != nil && s.externalBusy() {
+		return ErrBuildRunning
+	}
 	snapshots := s.snapshot.List()
 	if len(snapshots) == 0 {
 		return fmt.Errorf("no snapshots available")

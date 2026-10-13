@@ -940,6 +940,38 @@ body {
   cursor: not-allowed;
 }
 
+/* ---------- Recorded workflows ---------- */
+
+.workflow-runs {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 12px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-color);
+}
+
+.workflow-runs__card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 22px;
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+}
+
+.workflow-runs__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.build-snapshot--pending .build-snapshot__badge {
+  background: var(--ink-100);
+}
+
 /* ---------- Build progress ---------- */
 
 .build-progress-slot:empty {

@@ -11,6 +11,7 @@ import type { Snapshot } from '../types';
 import { EditSnapshotPanel } from '../components/EditSnapshotPanel';
 import { TokenRequiredNotice } from '../components/TokenRequiredNotice';
 import { useToken } from '../hooks/useToken';
+import { WorkflowRunsSection } from '../components/WorkflowRunsSection';
 
 export function SnapshotsPage() {
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
@@ -160,6 +161,8 @@ export function SnapshotsPage() {
         </div>
 
         <div className="build-progress-slot" ref={setProgressHost} />
+
+        <WorkflowRunsSection token={token} hasToken={hasToken} busy={false} />
       </main>
       {editingSnapshot && (
         <EditSnapshotPanel

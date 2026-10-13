@@ -8,6 +8,7 @@ import { useToken } from '../hooks/useToken';
 import { useTokenPrompt } from '../hooks/useTokenPrompt';
 import { TokenSettingsPanel } from '../components/TokenSettingsPanel';
 import { BrandMark } from '../components/BrandMark';
+import { RecordLauncher } from '../components/RecordLauncher';
 
 export function Popup() {
   const connectionStatus = useConnectionStatus();
@@ -101,6 +102,8 @@ export function Popup() {
           disabled={isBackendOffline}
           onCaptured={queue.refresh}
         />
+
+        <RecordLauncher disabled={isBackendOffline} />
 
         <button
           className="button button--secondary button--block"

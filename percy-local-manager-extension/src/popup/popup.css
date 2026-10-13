@@ -1313,3 +1313,63 @@ body {
   0%, 100% { box-shadow: 0 0 0 2px #f5b301; }
   50% { box-shadow: 0 0 0 6px rgba(245, 179, 1, 0.35); }
 }
+
+/* Workflow recorder */
+.recorded-steps {
+  list-style: decimal inside;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.recorded-step {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.recorded-step__text--checkpoint {
+  font-weight: 600;
+  color: var(--violet-700);
+}
+
+.recorded-step__actions {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.edit-step {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.edit-step__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.saved-workflows {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+}
+
+/* Run progress / build history */
+.run-status { margin: 0; font-size: 12px; font-weight: 600; }
+.run-status--passed { color: var(--success-700, #15803d); }
+.run-status--failed, .run-status--cancelled { color: var(--error-700, #b91c1c); }
+.run-status--partial { color: #b45309; }
+.run-steps, .run-checkpoints, .build-history { margin: 0; padding-left: 16px; font-size: 12px; max-height: 140px; overflow-y: auto; }
+.run-steps { list-style: none; padding-left: 0; }
+.run-step--failed { color: var(--error-700, #b91c1c); }
+.run-step--skipped, .run-step--pending { opacity: 0.6; }
+.run-step__error { font-weight: 400; }
