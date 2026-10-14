@@ -8,6 +8,9 @@ import (
 
 const maxLogLines = 500
 
+// subscriber is a channel that receives a signal whenever the job state changes.
+type subscriber chan struct{}
+
 type BuildStatusValue string
 type BuildPhase string
 type SnapshotState string
@@ -58,16 +61,48 @@ type BuildStatus struct {
 
 // BuildJob tracks the progress of one finalize run. Safe for concurrent use.
 type BuildJob struct {
-	mu sync.Mutex
-	s  BuildStatus
+	mu   sync.Mutex
+	s    BuildStatus
+	subs map[subscriber]struct{}
 }
 
 func NewBuildJob() *BuildJob {
-	return &BuildJob{s: BuildStatus{
-		Status:    StatusIdle,
-		Snapshots: []SnapshotProgress{},
-		Logs:      []BuildLogEntry{},
-	}}
+	return &BuildJob{
+		s: BuildStatus{
+			Status:    StatusIdle,
+			Snapshots: []SnapshotProgress{},
+			Logs:      []BuildLogEntry{},
+		},
+		subs: make(map[subscriber]struct{}),
+	}
+}
+
+// Subscribe returns a channel that receives a signal (non-blocking send) on
+// every state change. Call Unsubscribe when done.
+func (j *BuildJob) Subscribe() subscriber {
+	ch := make(subscriber, 1)
+	j.mu.Lock()
+	j.subs[ch] = struct{}{}
+	j.mu.Unlock()
+	return ch
+}
+
+// Unsubscribe removes and closes the subscriber channel.
+func (j *BuildJob) Unsubscribe(ch subscriber) {
+	j.mu.Lock()
+	delete(j.subs, ch)
+	j.mu.Unlock()
+	close(ch)
+}
+
+// notify sends a non-blocking signal to all subscribers. Must be called with mu held.
+func (j *BuildJob) notify() {
+	for ch := range j.subs {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	}
 }
 
 // Start resets the job for a new run. Returns false if one is already running.
@@ -84,12 +119,14 @@ func (j *BuildJob) Start(snaps []SnapshotProgress) bool {
 		Snapshots: snaps,
 		Logs:      []BuildLogEntry{},
 	}
+	j.notify()
 	return true
 }
 
 func (j *BuildJob) SetPhase(p BuildPhase) {
 	j.mu.Lock()
 	j.s.Phase = p
+	j.notify()
 	j.mu.Unlock()
 }
 
@@ -104,6 +141,7 @@ func (j *BuildJob) SetSnapshot(i int, state SnapshotState, errMsg string) {
 	if state == SnapSent {
 		j.s.Sent++
 	}
+	j.notify()
 }
 
 // AddLog appends a line, detecting its level, keeping only the newest lines.
@@ -119,6 +157,7 @@ func (j *BuildJob) AddLog(line string) {
 	if len(j.s.Logs) > maxLogLines {
 		j.s.Logs = append([]BuildLogEntry(nil), j.s.Logs[len(j.s.Logs)-maxLogLines:]...)
 	}
+	j.notify()
 }
 
 func (j *BuildJob) Succeed(buildID, buildURL string) {
@@ -127,6 +166,7 @@ func (j *BuildJob) Succeed(buildID, buildURL string) {
 	j.s.Phase = PhaseDone
 	j.s.BuildID = buildID
 	j.s.BuildURL = buildURL
+	j.notify()
 	j.mu.Unlock()
 }
 
@@ -134,6 +174,7 @@ func (j *BuildJob) Fail(err error) {
 	j.mu.Lock()
 	j.s.Status = StatusFailed
 	j.s.Error = err.Error()
+	j.notify()
 	j.mu.Unlock()
 }
 

@@ -45,6 +45,12 @@ func (s *BuildService) Status() BuildStatus {
 	return s.job.Snapshot()
 }
 
+// Subscribe returns a channel signalled on every state change.
+func (s *BuildService) Subscribe() subscriber { return s.job.Subscribe() }
+
+// Unsubscribe removes the subscriber.
+func (s *BuildService) Unsubscribe(ch subscriber) { s.job.Unsubscribe(ch) }
+
 // StartFinalize validates, then runs the build in the background.
 func (s *BuildService) StartFinalize(token string) error {
 	if s.externalBusy != nil && s.externalBusy() {

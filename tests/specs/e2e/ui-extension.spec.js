@@ -65,6 +65,7 @@ const CHROME_RUNTIME_POLYFILL = `
     window.chrome.storage = window.chrome.storage || {
       local: makeArea(),
       sync: makeArea(),
+      session: makeArea(),
       onChanged: { addListener: function() {}, removeListener: function() {} },
     };
   })();
@@ -177,6 +178,8 @@ test.describe('Extension UI (popup pages via Vite dev server)', () => {
 
   test('Snapshots: shows token-required notice instead of a token input when no token is saved', async () => {
     await goTo('snapshots.html');
+    // Wait for the async token check to complete (loading state disappears)
+    await expect(page.locator('.loading-state')).toHaveCount(0, { timeout: 10_000 });
     // SnapshotsPage renders <TokenRequiredNotice role="alert"> and no #percy-token input
     await expect(page.getByRole('alert').filter({ hasText: 'A Percy token is required to finalize a build' })).toBeVisible();
     await expect(page.locator('#percy-token')).toHaveCount(0);
@@ -190,6 +193,8 @@ test.describe('Extension UI (popup pages via Vite dev server)', () => {
 
   test('Snapshots: Finalize Build button is present and disabled when no token is saved', async () => {
     await goTo('snapshots.html');
+    // Wait for token loading to complete before checking disabled state
+    await expect(page.locator('.loading-state')).toHaveCount(0, { timeout: 10_000 });
     // FinalizeBuildPanel renders <button>Finalize Build</button>, disabled without a token / snapshots
     const finalizeBtn = page.getByRole('button', { name: 'Finalize Build' });
     await expect(finalizeBtn).toBeVisible();
@@ -228,17 +233,19 @@ test.describe('Extension UI (popup pages via Vite dev server)', () => {
         : route.fallback()
     );
     await page.route('**/build/finalize', (route) => route.fulfill(json({ status: 'running' }, 202)));
-    await page.route('**/build/status', (route) =>
-      route.fulfill(json({
-        status: 'failed',
-        phase: 'starting',
-        total: 1,
-        sent: 0,
-        snapshots: [{ id: 's1', name: 'Home', state: 'failed', error: ERROR_TEXT }],
-        logs: [{ ts: '2026-01-01T00:00:00Z', level: 'error', line: ERROR_TEXT }],
-        error: ERROR_TEXT,
-      }))
-    );
+    const failedStatus = json({
+      status: 'failed',
+      phase: 'starting',
+      total: 1,
+      sent: 0,
+      snapshots: [{ id: 's1', name: 'Home', state: 'failed', error: ERROR_TEXT }],
+      logs: [{ ts: '2026-01-01T00:00:00Z', level: 'error', line: ERROR_TEXT }],
+      error: ERROR_TEXT,
+    });
+    await page.route('**/build/status', (route) => route.fulfill(failedStatus));
+    // Abort the SSE stream so EventSource fires onerror immediately and the hook
+    // falls back to polling /build/status (which IS mocked to return failed above).
+    await page.route('**/build/stream', (route) => route.abort());
 
     try {
       await goTo('snapshots.html');
@@ -254,6 +261,7 @@ test.describe('Extension UI (popup pages via Vite dev server)', () => {
       await page.unroute('**/snapshots');
       await page.unroute('**/build/finalize');
       await page.unroute('**/build/status');
+      await page.unroute('**/build/stream');
     }
   });
 

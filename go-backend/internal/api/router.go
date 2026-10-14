@@ -74,6 +74,7 @@ func (s *Server) routes() {
 
 	s.mux.HandleFunc("/build/finalize", buildHandler.Finalize)
 	s.mux.HandleFunc("/build/status", buildHandler.Status)
+	s.mux.HandleFunc("/build/stream", buildHandler.Stream)
 
 	s.mux.HandleFunc("/library/token" ,libraryHandler.SetToken)
 	s.mux.HandleFunc("/library/search", libraryHandler.Search)		
