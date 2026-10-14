@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+  <head><title>Dynamic fixture</title></head>
+  <body>
+    <h1>Login</h1>
+    <label for="user">Username</label><input id="user" type="text" />
+    <label for="pw">Password</label><input id="pw" type="password" />
+    <label><input id="agree" type="checkbox" /> I agree</label>
+    <label for="plan">Plan</label>
+    <select id="plan"><option value="free">Free</option><option value="pro">Pro</option></select>
+    <button id="signin">Sign in</button>
+
+    <!-- two identical buttons: ambiguous on purpose -->
+    <button class="dup">Duplicate</button>
+    <button class="dup">Duplicate</button>
+
+    <div id="out"></div>
+    <script>
+      document.getElementById('signin').addEventListener('click', () => {
+        // content appears AFTER a delay: the runner must wait on a condition, not a fixed sleep
+        setTimeout(() => {
+          const h = document.createElement('h2');
+          h.textContent = 'Dashboard';
+          document.body.appendChild(h);
+          document.getElementById('out').textContent =
+            'user=' + document.getElementById('user').value +
+            ';pw=' + document.getElementById('pw').value +
+            ';agree=' + document.getElementById('agree').checked +
+            ';plan=' + document.getElementById('plan').value;
+        }, 800);
+      });
+    </script>
+  </body>
+</html>

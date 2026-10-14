@@ -390,6 +390,13 @@ body {
   gap: 8px;
 }
 
+.finalize-build__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
 .finalize-result {
   display: flex;
   flex-direction: column;
@@ -931,4 +938,638 @@ body {
 .snapshot-row__delete:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+/* ---------- Recorded workflows ---------- */
+
+.workflow-runs {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 12px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-color);
+}
+
+.workflow-runs__card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 22px;
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+}
+
+.workflow-runs__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.build-snapshot--pending .build-snapshot__badge {
+  background: var(--ink-100);
+}
+
+/* ---------- Build progress ---------- */
+
+.build-progress-slot:empty {
+  display: none;
+}
+
+.build-card {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px 22px;
+  box-shadow: 0 6px 24px rgba(21, 18, 31, 0.06);
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+}
+
+.build-card--failed {
+  border-color: #f3aca7;
+}
+
+.build-card--success {
+  border-color: #b7ead4;
+}
+
+/* Stepper: numbered dots joined by a connector line */
+.build-stepper {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.build-step {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.build-step:not(:first-child)::before {
+  content: '';
+  position: absolute;
+  top: 10px;
+  right: 50%;
+  width: 100%;
+  height: 2px;
+  background: var(--ink-150);
+}
+
+.build-step--done:not(:first-child)::before,
+.build-step--active:not(:first-child)::before {
+  background: var(--violet-400);
+}
+
+.build-step--failed:not(:first-child)::before {
+  background: var(--error-600);
+}
+
+.build-step__dot {
+  position: relative;
+  z-index: 1;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--ink-100);
+  color: var(--ink-500);
+  border: 2px solid var(--ink-150);
+}
+
+.build-step--done .build-step__dot {
+  background: var(--violet-600);
+  border-color: var(--violet-600);
+  color: #fff;
+}
+
+.build-step--active .build-step__dot {
+  background: #fff;
+  border-color: var(--violet-600);
+  color: var(--violet-600);
+  box-shadow: 0 0 0 3px var(--violet-100);
+}
+
+.build-step--failed .build-step__dot {
+  background: var(--error-600);
+  border-color: var(--error-600);
+  color: #fff;
+}
+
+.build-step__label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ink-500);
+}
+
+.build-step--active .build-step__label,
+.build-step--done .build-step__label {
+  color: var(--ink-900);
+}
+
+/* Summary + bar */
+.build-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.build-summary__row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.build-summary__count {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ink-900);
+}
+
+.build-summary__total {
+  color: var(--ink-300);
+}
+
+.build-summary__text {
+  font-size: 11px;
+  color: var(--ink-500);
+}
+
+.build-summary__percent {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--violet-700);
+}
+
+.build-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--ink-150);
+  overflow: hidden;
+}
+
+.build-bar__fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--violet-600);
+  transition: width 0.3s ease;
+}
+
+.build-bar__fill--live {
+  background: linear-gradient(
+    90deg,
+    var(--violet-600) 0%,
+    var(--violet-400) 50%,
+    var(--violet-600) 100%
+  );
+  background-size: 200% 100%;
+  animation: build-bar-shimmer 1.4s linear infinite;
+}
+
+.build-bar__fill--failed {
+  background: var(--error-600);
+}
+
+@keyframes build-bar-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: 0 0; }
+}
+
+/* Failure banner */
+.build-alert {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--error-100);
+  color: var(--error-600);
+  font-size: 11.5px;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+/* Snapshot rows */
+.build-snapshots {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+}
+
+.build-snapshot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  font-size: 13px;
+  color: var(--ink-700);
+}
+
+.build-snapshot + .build-snapshot {
+  border-top: 1px solid var(--ink-100);
+}
+
+.build-snapshot__badge {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--ink-100);
+  border: 2px solid var(--ink-150);
+  color: #fff;
+}
+
+.build-snapshot--sent .build-snapshot__badge {
+  background: var(--success-600);
+  border-color: var(--success-600);
+}
+
+.build-snapshot--failed .build-snapshot__badge {
+  background: var(--error-600);
+  border-color: var(--error-600);
+}
+
+.build-snapshot--sending .build-snapshot__badge {
+  background: transparent;
+  border-color: var(--violet-100);
+  border-top-color: var(--violet-600);
+  animation: build-spin 0.8s linear infinite;
+}
+
+@keyframes build-spin {
+  to { transform: rotate(360deg); }
+}
+
+.build-snapshot__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.build-snapshot__name {
+  font-weight: 600;
+  color: var(--ink-900);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.build-snapshot__error {
+  font-size: 10.5px;
+  color: var(--error-600);
+  word-break: break-word;
+}
+
+.build-snapshot__state {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--ink-500);
+}
+
+.build-snapshot--sent .build-snapshot__state {
+  color: var(--success-600);
+}
+
+.build-snapshot--failed .build-snapshot__state {
+  color: var(--error-600);
+}
+
+.build-snapshot--sending .build-snapshot__state {
+  color: var(--violet-600);
+}
+
+/* Logs */
+.build-logs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.build-logs__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.build-logs__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  border: none;
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-700);
+  cursor: pointer;
+}
+
+.build-logs__toggle:hover {
+  color: var(--violet-600);
+}
+
+.build-logs__count {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--ink-100);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ink-500);
+}
+
+.build-logs__count--error {
+  background: var(--error-100);
+  color: var(--error-600);
+}
+
+.build-logs__copy {
+  padding: 4px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-700);
+  cursor: pointer;
+}
+
+.build-logs__copy:hover:not(:disabled) {
+  border-color: var(--violet-400);
+  color: var(--violet-700);
+}
+
+.build-logs__copy:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.build-logs__body {
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 10px 12px;
+  background: var(--ink-900);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.build-log {
+  display: flex;
+  gap: 8px;
+  color: var(--ink-300);
+}
+
+.build-log__tag {
+  flex-shrink: 0;
+  width: 24px;
+  font-weight: 700;
+  opacity: 0.7;
+}
+
+.build-log__text {
+  min-width: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.build-log--warn {
+  color: var(--amber-400);
+}
+
+.build-log--error {
+  color: #ff8a84;
+}
+
+.build-log--error .build-log__tag {
+  opacity: 1;
+}
+
+.build-log--empty {
+  color: var(--ink-500);
+}
+
+/* ---------- Edit workflow modal ---------- */
+
+.workflow-edit-panel {
+  width: min(680px, 100%);
+}
+
+.workflow-edit-panel__steps {
+  flex: 1 1 auto;
+  min-height: 120px;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.workflow-edit-panel .recorded-steps {
+  list-style: none;
+  counter-reset: step;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.workflow-edit-panel .recorded-step {
+  counter-increment: step;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--canvas);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  color: var(--ink-900);
+}
+
+.workflow-edit-panel .recorded-step::before {
+  content: counter(step);
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--violet-100);
+  color: var(--violet-700);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.workflow-edit-panel .recorded-step__text {
+  flex: 1 1 200px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.workflow-edit-panel .recorded-step__text--checkpoint {
+  font-weight: 700;
+  color: var(--violet-700);
+}
+
+.workflow-edit-panel .recorded-step__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.workflow-edit-panel .recorded-step__actions .button {
+  padding: 4px 9px;
+  min-height: 0;
+  font-size: 12px;
+}
+
+/* Step editor (nested in a step row) */
+
+.workflow-edit-panel .edit-step {
+  flex: 1 1 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0 2px;
+}
+
+.workflow-edit-panel .field-label {
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-700);
+}
+
+.workflow-edit-panel .field-help {
+  margin: 0;
+  font-size: 11px;
+  color: var(--ink-500);
+}
+
+.workflow-edit-panel .text-input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink-900);
+  font-family: var(--font-body);
+  font-size: 13px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.workflow-edit-panel .text-input:focus {
+  outline: none;
+  border-color: var(--violet-500);
+  box-shadow: 0 0 0 3px var(--violet-100);
+}
+
+.workflow-edit-panel .textarea-input {
+  resize: vertical;
+  min-height: 80px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.workflow-edit-panel .width-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.workflow-edit-panel .width-row .text-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.workflow-edit-panel .width-remove {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink-500);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.workflow-edit-panel .width-remove:hover {
+  color: var(--error-600);
+  background: var(--error-100);
+  border-color: #f3aca7;
+}
+
+.workflow-edit-panel .checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-700);
+  cursor: pointer;
+}
+
+.workflow-edit-panel .checkbox-field input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--violet-600);
+}
+
+.workflow-edit-panel .edit-step__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border-color);
+}
+
+@media (max-width: 600px) {
+  .workflow-edit-panel .recorded-step__actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+.workflow-edit-panel .recorded-step__confirm {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--error-600);
 }

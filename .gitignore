@@ -4,3 +4,9 @@ tests/node_modules/
 tests/test-results/
 tests/playwright-report/
 tests/log/
+
+# Test Companion onboarding (local, per-machine)
+.test-companion/
+
+# Internal developer context docs (not for commit)
+docs/recorder-context.md
