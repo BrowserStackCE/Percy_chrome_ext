@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { listBuilds } from '../services/workflowApi';
+import { listBuilds, updateWorkflow } from '../services/workflowApi';
+import { RecordedSteps } from './RecordedSteps';
+import { renumber } from '../utils/recorderCore';
 import { useRun } from '../hooks/useRun';
 import { useWorkflows } from '../hooks/useWorkflows';
 import { isTerminal, type WorkflowBuild } from '../types/build';
-import type { Workflow } from '../types/workflow';
+import type { Workflow, WorkflowStep } from '../types/workflow';
 
 interface WorkflowRunsSectionProps {
   token: string;
@@ -43,7 +45,11 @@ function when(iso: string): string {
  * build, follow progress, and browse earlier builds.
  */
 export function WorkflowRunsSection({ token, hasToken, busy }: WorkflowRunsSectionProps) {
-  const { workflows, error: listError } = useWorkflows(true);
+  const { workflows, error: listError, refresh } = useWorkflows(true);
+  // Inline editor: a working copy of the selected workflow's steps.
+  const [editSteps, setEditSteps] = useState<WorkflowStep[] | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
   const [historyKey, setHistoryKey] = useState(0);
   const run = useRun(token, () => setHistoryKey((k) => k + 1));
   const [selectedId, setSelectedId] = useState('');
@@ -66,7 +72,30 @@ export function WorkflowRunsSection({ token, hasToken, busy }: WorkflowRunsSecti
   const selected = workflows.find((w) => w.workflowId === selectedId) ?? workflows[0];
   const needed = selected ? secretNames(selected) : [];
   const missing = needed.filter((n) => !secrets[n]);
-  const canStart = hasToken && !busy && !!selected && !run.running && !run.starting && missing.length === 0;
+  const editing = editSteps !== null;
+  const canStart =
+    hasToken && !busy && !!selected && !run.running && !run.starting && missing.length === 0 && !editing;
+
+  function closeEditor() {
+    if (editSaving) return;
+    setEditSteps(null);
+    setEditError(null);
+  }
+
+  async function handleSaveEdit() {
+    if (!selected?.workflowId || !editSteps) return;
+    setEditSaving(true);
+    setEditError(null);
+    try {
+      await updateWorkflow(selected.workflowId, { ...selected, steps: renumber(editSteps) });
+      await refresh();
+      setEditSteps(null);
+    } catch (e) {
+      setEditError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setEditSaving(false);
+    }
+  }
 
   async function handleStart() {
     if (!selected?.workflowId) return;
@@ -109,7 +138,12 @@ export function WorkflowRunsSection({ token, hasToken, busy }: WorkflowRunsSecti
               id="wf-select"
               className="input"
               value={selected?.workflowId ?? ''}
-              onChange={(e) => setSelectedId(e.target.value)}
+              onChange={(e) => {
+                setSelectedId(e.target.value);
+                setEditSteps(null);
+                setEditError(null);
+              }}
+              disabled={editing}
             >
               {workflows.map((w) => (
                 <option key={w.workflowId} value={w.workflowId}>
@@ -117,6 +151,21 @@ export function WorkflowRunsSection({ token, hasToken, busy }: WorkflowRunsSecti
                 </option>
               ))}
             </select>
+
+            {selected && !editing && (
+              <div>
+                <button
+                  type="button"
+                  className="button button--secondary"
+                  onClick={() => {
+                    setEditSteps(selected.steps);
+                    setEditError(null);
+                  }}
+                >
+                  Edit workflow
+                </button>
+              </div>
+            )}
 
             {needed.map((name) => (
               <div key={name} className="token-section">
@@ -149,6 +198,59 @@ export function WorkflowRunsSection({ token, hasToken, busy }: WorkflowRunsSecti
             </button>
           </div>
           {run.error && <p className="message message--error">{run.error}</p>}
+        </div>
+      )}
+
+      {selected && editSteps && (
+        <div
+          className="snapshot-edit-overlay"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeEditor();
+          }}
+        >
+          <div
+            className="snapshot-edit-panel workflow-edit-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="workflow-edit-title"
+          >
+            <header className="snapshot-edit-panel__header">
+              <div>
+                <span className="snapshot-edit-panel__eyebrow">Edit workflow</span>
+                <h2 id="workflow-edit-title">{selected.name}</h2>
+                <p>Reorder, edit or remove steps. Changes apply to the next replay.</p>
+              </div>
+              <button
+                type="button"
+                className="snapshot-edit-panel__close"
+                aria-label="Close"
+                onClick={closeEditor}
+                disabled={editSaving}
+              >
+                ×
+              </button>
+            </header>
+
+            <div className="workflow-edit-panel__steps">
+              <RecordedSteps steps={editSteps} editable={true} onChange={setEditSteps} />
+            </div>
+
+            {editError && <p className="message message--error">{editError}</p>}
+
+            <div className="snapshot-edit-panel__actions">
+              <button type="button" className="button button--secondary" onClick={closeEditor} disabled={editSaving}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="button button--primary"
+                onClick={handleSaveEdit}
+                disabled={editSaving || editSteps.length === 0}
+              >
+                {editSaving ? 'Saving…' : 'Save changes'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

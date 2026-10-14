@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -63,7 +64,9 @@ func (h *RunsHandler) StartRun(w http.ResponseWriter, r *http.Request, workflowI
 		case errors.Is(err, runs.ErrNoToken):
 			writeErr(w, http.StatusBadRequest, err.Error())
 		default:
-			writeErr(w, http.StatusInternalServerError, "could not start run")
+			// Keep the real cause visible: a bare message made start failures undiagnosable.
+			log.Printf("[runs] start failed for %s: %v", workflowID, err)
+			writeErr(w, http.StatusInternalServerError, "could not start run: "+err.Error())
 		}
 		return
 	}

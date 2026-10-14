@@ -25,6 +25,8 @@ function validate(req) {
 
 async function doSnapshot(page, step, req, state) {
   const { buildId, artifactDir, percyUrl, workflow } = req;
+  // Intentional wait so late content settles before the DOM is captured.
+  if (step.waitMs > 0) await page.waitForTimeout(step.waitMs);
   const dom = await serializeDom(page, req.secrets);
   const paths = await saveCheckpoint(
     page,
@@ -47,8 +49,15 @@ async function doSnapshot(page, step, req, state) {
       name: step.name,
       url: page.url(),
       dom,
-      widths: workflow.settings?.viewport ? [workflow.settings.viewport.width] : undefined,
-      minHeight: workflow.settings?.viewport?.height,
+      widths: step.options?.widths?.length
+        ? step.options.widths
+        : workflow.settings?.viewport
+          ? [workflow.settings.viewport.width]
+          : undefined,
+      minHeight: step.options?.minHeight || workflow.settings?.viewport?.height,
+      scope: step.options?.scope,
+      enableJavaScript: step.options?.enableJavaScript,
+      percyCSS: step.options?.percyCSS,
     });
     emit({ type: 'checkpointUploaded', checkpointId: step.checkpointId });
   } catch (e) {

@@ -39,7 +39,9 @@ export function describeStep(step: WorkflowStep): string {
     case 'scroll':
       return `Scroll to (${step.scrollX ?? 0}, ${step.scrollY ?? 0})`;
     case 'snapshot':
-      return `Snapshot: ${step.name ?? step.checkpointId ?? ''}`;
+      return `Snapshot: ${step.name ?? step.checkpointId ?? ''}${
+        step.waitMs !== undefined ? ` (wait ${step.waitMs / 1000}s)` : ''
+      }`;
     default:
       return step.type;
   }
@@ -47,6 +49,7 @@ export function describeStep(step: WorkflowStep): string {
 
 export function RecordedSteps({ steps, editable, onChange }: RecordedStepsProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
 
   if (steps.length === 0) {
     return <p className="field-help">No steps recorded yet.</p>;
@@ -59,6 +62,7 @@ export function RecordedSteps({ steps, editable, onChange }: RecordedStepsProps)
 
   function remove(id: string) {
     onChange(steps.filter((s) => s.id !== id));
+    setConfirmId(null);
   }
 
   function move(index: number, delta: number) {
@@ -88,7 +92,22 @@ export function RecordedSteps({ steps, editable, onChange }: RecordedStepsProps)
               >
                 {step.label || describeStep(step)}
               </span>
-              {editable && (
+              {editable && confirmId === step.id && (
+                <span className="recorded-step__actions" role="alertdialog" aria-label={`Confirm delete step ${index + 1}`}>
+                  <span className="recorded-step__confirm">Delete this step?</span>
+                  <button
+                    type="button"
+                    className="button button--danger"
+                    onClick={() => remove(step.id)}
+                  >
+                    Yes, delete
+                  </button>
+                  <button type="button" className="button button--link" onClick={() => setConfirmId(null)}>
+                    Cancel
+                  </button>
+                </span>
+              )}
+              {editable && confirmId !== step.id && (
                 <span className="recorded-step__actions">
                   <button
                     type="button"
@@ -120,7 +139,7 @@ export function RecordedSteps({ steps, editable, onChange }: RecordedStepsProps)
                     type="button"
                     className="button button--danger"
                     aria-label={`Delete step ${index + 1}`}
-                    onClick={() => remove(step.id)}
+                    onClick={() => setConfirmId(step.id)}
                   >
                     ✕
                   </button>

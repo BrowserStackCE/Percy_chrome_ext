@@ -4,7 +4,7 @@
  * (so the popup can close freely). Self-contained: content scripts are not ES
  * modules, so Vite bundles this file into a single script.
  */
-import { isGeneratedId, isSensitiveField, rankTarget, toValueRef } from '../utils/recorderCore';
+import { isDynamicText, isGeneratedId, isSensitiveField, isUnstableClass, rankTarget, toValueRef } from '../utils/recorderCore';
 import type { RecordingState, Target, WorkflowStep } from '../types/workflow';
 import { initWidget, setState } from './widget';
 
@@ -66,10 +66,73 @@ function stableCss(el: Element): string | undefined {
   return undefined;
 }
 
+function count(sel: string): number {
+  try {
+    return document.querySelectorAll(sel).length;
+  } catch {
+    return 0;
+  }
+}
+
+function attrSel(tag: string, attr: string, value: string): string {
+  return `${tag}[${attr}="${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"]`;
+}
+
+/** Stable classes of an element (no hashed / state / numeric classes). */
+function stableClasses(el: Element): string[] {
+  return Array.from(el.classList).filter((c) => !isUnstableClass(c) && /^[A-Za-z_-][\w-]*$/.test(c));
+}
+
+/** Own-attribute selectors that survive reloads: aria-label, title, alt, href path, type... */
+function attributeCss(el: Element): string[] {
+  const tag = el.tagName.toLowerCase();
+  const out: string[] = [];
+  for (const attr of ['aria-label', 'title', 'alt', 'placeholder', 'name']) {
+    const v = el.getAttribute(attr);
+    if (v && v.length <= 80 && !isDynamicText(v)) out.push(attrSel(tag, attr, v));
+  }
+  const href = el.getAttribute('href');
+  if (href && !href.startsWith('javascript:') && href.length <= 120) {
+    const path = href.replace(/[?#].*$/, '');
+    if (path && path !== '/' && !/\d{4,}/.test(path)) out.push(attrSel(tag, 'href', href.replace(/#.*$/, '')));
+  }
+  const cls = stableClasses(el);
+  if (cls.length) {
+    out.push(`${tag}.${cls.slice(0, 2).map(cssEscape).join('.')}`);
+    out.push(`.${cls.slice(0, 2).map(cssEscape).join('.')}`);
+  }
+  return out;
+}
+
+/** One segment for the ancestor path: stable id, else tag + stable classes. */
+function segment(node: Element): string {
+  const sid = stableCss(node);
+  if (sid) return sid;
+  const tag = node.tagName.toLowerCase();
+  const cls = stableClasses(node).slice(0, 2);
+  return cls.length ? `${tag}.${cls.map(cssEscape).join('.')}` : tag;
+}
+
+/**
+ * Ancestor-scoped selector: the nearest stable ancestor plus a short
+ * descendant path, kept only when it matches exactly one element. Far more
+ * resilient than a long nth-of-type chain.
+ */
+function scopedCss(el: Element): string | undefined {
+  const own = attributeCss(el)[0] ?? segment(el);
+  let anc: Element | null = el.parentElement;
+  for (let depth = 0; anc && anc !== document.body && depth < 5; depth++, anc = anc.parentElement) {
+    const stable = stableCss(anc) ?? (stableClasses(anc).length ? segment(anc) : undefined);
+    if (!stable) continue;
+    const sel = `${stable} ${own}`;
+    if (count(sel) === 1) return sel;
+  }
+  return undefined;
+}
+
 /**
  * Last-resort structural selector (tag + nth-of-type chain up to the nearest
- * element with a stable id). Used so every recorded click has a locator even
- * when the element has no test id, role/name, id or name attribute.
+ * element with a stable id).
  */
 function structuralCss(el: Element): string {
   const parts: string[] = [];
@@ -93,44 +156,54 @@ function structuralCss(el: Element): string {
   return parts.join(' > ');
 }
 
+function normText(el: Element): string {
+  return (el.textContent ?? '').trim().replace(/\s+/g, ' ');
+}
+
+function inSecretContainer(el: Element): boolean {
+  for (let n: Element | null = el; n; n = n.parentElement) {
+    const id = n.getAttribute('id');
+    const nm = n.getAttribute('name');
+    if ((id || nm) && isSensitiveField({ id, name: nm, type: n.getAttribute('type') })) return true;
+  }
+  return false;
+}
+
+/**
+ * Builds several independent, ranked locators for one element so replay can
+ * fall back when one stops matching: test id > role+name > stable id/name >
+ * stable attributes/classes (unique ones first) > ancestor-scoped path >
+ * non-dynamic text > structural path (last resort).
+ */
 function targetFor(el: Element): Target {
   const testId =
     el.getAttribute('data-testid') ?? el.getAttribute('data-test-id') ?? el.getAttribute('data-test') ?? undefined;
   const role = roleOf(el);
-  const name = accessibleName(el) || undefined;
-  const text = el.tagName.toLowerCase() === 'a' || role === 'button' ? name : undefined;
-  const ranked = rankTarget({ testId, role, name, css: stableCss(el), text });
-  const hasLocator = !!(ranked.testId || ranked.role || ranked.css || ranked.text);
-  // Role alone (no accessible name) is ambiguous; prefer the structural path.
-  if (hasLocator && !(ranked.role && !ranked.name && !ranked.testId && !ranked.css && !ranked.text)) return ranked;
-  // Nothing stable on the element itself (e.g. a dropdown option whose id is
-  // generated). Its visible text survives reloads far better than a position,
-  // so use it first and keep the structural path only as a fallback.
-  const css = structuralCss(el);
-  // Only a leaf element's own text is a meaningful locator. A wrapper's
-  // textContent concatenates every descendant ("demouserSelect PasswordLog In")
-  // and would never match anything on replay.
-  const visible = el.children.length === 0 ? (el.textContent ?? '').trim().replace(/\s+/g, ' ') : '';
-  // Never store the visible text of something inside a secret field (for
-  // example the options of a #password dropdown): it may be the secret itself.
-  const inSecretContainer = (() => {
-    for (let n: Element | null = el; n; n = n.parentElement) {
-      const id = n.getAttribute('id');
-      const nm = n.getAttribute('name');
-      if ((id || nm) && isSensitiveField({ id, name: nm, type: n.getAttribute('type') })) return true;
-    }
-    return false;
-  })();
-  if (visible && visible.length <= 80 && !inSecretContainer) {
-    // Replay refuses ambiguous matches, so only lead with text when it is
-    // unique on the page right now; otherwise lead with the structural path.
-    const sameText = Array.from(document.querySelectorAll('body *')).filter(
-      (n) => n.children.length === 0 && (n.textContent ?? '').trim().replace(/\s+/g, ' ') === visible,
-    ).length;
-    if (sameText <= 1) return { text: visible, ...(css ? { fallbacks: [{ css }] } : {}) };
-    if (css) return { css, fallbacks: [{ text: visible }] };
+  const rawName = accessibleName(el);
+  const secret = inSecretContainer(el);
+  // Counters, prices and one-character labels ("0", "X") are not identifiers.
+  const name = rawName && !secret && !isDynamicText(rawName) ? rawName : undefined;
+  const text = (el.tagName.toLowerCase() === 'a' || role === 'button') && name ? name : undefined;
+
+  const unique: string[] = [];
+  const shared: string[] = [];
+  for (const sel of attributeCss(el)) (count(sel) === 1 ? unique : shared).push(sel);
+  const scoped = scopedCss(el);
+  const cssList = [...unique, ...(scoped ? [scoped] : [])];
+
+  // Leaf text as a late fallback when the element has no accessible name.
+  let leafText: string | undefined;
+  if (!text && !secret && el.children.length === 0) {
+    const t = normText(el);
+    if (t && t.length <= 80 && !isDynamicText(t)) leafText = t;
   }
-  return css ? { css, ...(ranked.fallbacks ? { fallbacks: ranked.fallbacks } : {}) } : ranked;
+
+  const structural = structuralCss(el);
+  const ranked = rankTarget(
+    { testId, role, name, css: stableCss(el), text: text ?? leafText },
+    [...cssList, ...shared.slice(0, 1), ...(structural ? [structural] : [])],
+  );
+  return ranked;
 }
 
 function interactive(el: EventTarget | null): Element | null {

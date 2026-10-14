@@ -1,7 +1,7 @@
 // Locator resolution. Order of preference matches the recorder:
 // test id, role+name, CSS, text. Recorded fallbacks are tried in order.
-// A locator that matches MORE THAN ONE element is an error: we fail safely
-// rather than act on an arbitrary element.
+// All strategies are polled together; an ambiguous match is narrowed to the
+// visible elements before it is treated as an error.
 
 export class LocatorError extends Error {
   constructor(message, kind) {
@@ -49,35 +49,66 @@ export function resolveLoose(page, target) {
   return loc;
 }
 
+const POLL_MS = 150;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 /**
- * Resolves `target` to exactly one element. Waits up to timeoutMs for the
- * primary locator, then tries fallbacks briefly. Throws LocatorError.
+ * Looks at one candidate right now. Returns {loc, n} where loc is a locator
+ * for exactly one element (or null) and n is the raw match count. When a
+ * candidate matches several elements, narrows to the visible ones; if exactly
+ * one is visible that is unambiguous enough to act on.
+ */
+async function probe(page, c) {
+  const loc = build(page, c);
+  if (!loc) return { loc: null, n: 0 };
+  let n;
+  try {
+    n = await loc.count();
+  } catch {
+    return { loc: null, n: 0 }; // e.g. invalid selector: treat as not found
+  }
+  if (n === 1) return { loc, n };
+  if (n > 1) {
+    const visible = loc.filter({ visible: true });
+    const v = await visible.count().catch(() => 0);
+    if (v === 1) return { loc: visible, n, visibleOnly: true };
+    return { loc: null, n, visibleCount: v };
+  }
+  return { loc: null, n: 0 };
+}
+
+/**
+ * Resolves `target` to one element. Every recorded strategy (primary and
+ * fallbacks) is re-checked on each poll until the timeout, so a page that
+ * renders late, or a primary locator that stops matching, still resolves via
+ * another strategy. Candidates are ranked: the highest-priority one that is
+ * unique (or unique among visible elements) wins. If nothing is ever unique
+ * the step fails safely rather than acting on an arbitrary element. Throws
+ * LocatorError listing everything that was tried.
  */
 export async function resolve(page, target, timeoutMs) {
   const list = candidates(target);
   if (list.length === 0) throw new LocatorError('step has no usable locator', 'missing');
 
-  const tried = [];
-  for (let i = 0; i < list.length; i++) {
-    const c = list[i];
-    const loc = build(page, c);
-    // primary gets the full timeout; fallbacks a short grace period
-    const wait = i === 0 ? timeoutMs : Math.min(1500, timeoutMs);
-    try {
-      await loc.first().waitFor({ state: 'attached', timeout: wait });
-    } catch {
-      tried.push(`${describe(c)} (not found)`);
-      continue;
-    }
-    const n = await loc.count();
-    if (n === 1) return loc;
-    if (n > 1) {
-      tried.push(`${describe(c)} (matched ${n} elements)`);
-      // ambiguous primary is a hard stop: do not silently switch strategy
-      if (i === 0) {
-        throw new LocatorError(`locator ${describe(c)} matched ${n} elements; refusing to act on an arbitrary one`, 'ambiguous');
-      }
-    }
+  const deadline = Date.now() + timeoutMs;
+  let last = [];
+  for (;;) {
+    const results = [];
+    for (const c of list) results.push(await probe(page, c));
+    last = results;
+    const hit = results.find((r) => r.loc);
+    if (hit) return hit.loc;
+    if (Date.now() >= deadline) break;
+    await sleep(POLL_MS);
   }
-  throw new LocatorError(`no element found. Tried: ${tried.join('; ')}`, 'missing');
+
+  // Nothing was unique across ALL strategies: refuse to act on an arbitrary
+  // element. The error lists every strategy and its match count.
+  const tried = list.map((c, i) => {
+    const r = last[i];
+    if (r?.n > 1) return `${describe(c)} (matched ${r.n} elements)`;
+    return `${describe(c)} (not found)`;
+  });
+  const anyAmbiguous = last.some((r) => r?.n > 1);
+  throw new LocatorError(`no element found. Tried: ${tried.join('; ')}`, anyAmbiguous ? 'ambiguous' : 'missing');
 }

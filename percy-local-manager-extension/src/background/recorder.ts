@@ -82,7 +82,15 @@ async function stop(): Promise<RecordingState> {
   const state = await load();
   const next = { ...state, active: false, paused: false };
   await save(next);
-  await notifyTab(state.tabId, false);
+  // Send the full state (with steps) so the content-script widget can render
+  // the save form immediately without waiting for a page reload.
+  if (state.tabId !== undefined) {
+    try {
+      await chrome.tabs.sendMessage(state.tabId, { kind: 'rec:state', state: next });
+    } catch {
+      /* tab closed or no content script */
+    }
+  }
   return next;
 }
 
@@ -196,7 +204,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       case 'rec:snapshot': {
         const state = await load();
         if (!state.active) throw new Error('Not recording.');
-        const next = { ...state, steps: addSnapshot(state.steps, String(msg.name ?? '')) };
+        const waitMs = typeof msg.waitMs === 'number' && msg.waitMs >= 0 && msg.waitMs <= 60000 ? Math.round(msg.waitMs) : undefined;
+        const next = {
+          ...state,
+          steps: addSnapshot(state.steps, String(msg.name ?? ''), { waitMs, options: msg.options }),
+        };
         await save(next);
         return next;
       }

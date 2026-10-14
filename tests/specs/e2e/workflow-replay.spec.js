@@ -105,7 +105,12 @@ test.describe('Workflow replay (real extension, runner and Percy)', () => {
     await rec({ kind: 'rec:snapshot', name: 'Welcome page' });
     await rec({ kind: 'rec:stop' });
 
-    await popup.reload();
+    // Re-open the popup as a fresh page: Chrome closes extension popup pages when
+    // they lose focus (page.bringToFront() above). A new page object is needed.
+    popup = await context.newPage();
+    await popup.goto(`chrome-extension://${extensionId}/index.html`);
+    await popup.waitForLoadState('domcontentloaded');
+    await expect(popup.locator('.connection-status--connected')).toBeVisible({ timeout: 10000 });
 
     // --- Edit Step UI: change the label of the click step ---
     const clickRow = popup.getByRole('listitem').filter({ hasText: 'Click' });
@@ -134,32 +139,37 @@ test.describe('Workflow replay (real extension, runner and Percy)', () => {
   });
 
   test('Replay / Create Build runs the journey and shows progress to a passed build', async ({ request }) => {
-    await popup.reload();
+    // Replay lives on the Snapshots page (Recorded Workflows section).
+    const list = await (await request.get(`${BACKEND}/api/workflows`)).json();
+    const wf = list.find((w) => w.name === workflowName);
+    expect(wf, 'workflow should be saved').toBeTruthy();
+    const sp = await context.newPage();
+    await sp.goto(`chrome-extension://${extensionId}/snapshots.html`);
+    await sp.locator('#wf-select').selectOption(wf.workflowId);
 
-    // Guard against a runaway polling loop: the popup should poll a build about
+    // Guard against a runaway polling loop: the page should poll a build about
     // every 1.5s, never hundreds of times per second.
     let buildPolls = 0;
-    popup.on('request', (req) => {
+    sp.on('request', (req) => {
       if (/\/api\/builds\/build_[^/]+$/.test(new URL(req.url()).pathname)) buildPolls++;
     });
     const polledFrom = Date.now();
 
     // The workflow expects one secret at replay time; it is entered per run and never saved.
-    const replayBtn = popup.getByRole('button', { name: 'Replay / Create Build' });
+    const replayBtn = sp.getByRole('button', { name: 'Replay / Create Build' });
     await expect(replayBtn).toBeDisabled(); // blocked until the secret is provided
-    await popup.getByLabel('Password', { exact: false }).fill('hunter2-SECRET');
+    await sp.getByLabel('Password', { exact: false }).fill('hunter2-SECRET');
     await expect(replayBtn).toBeEnabled();
     await replayBtn.click();
 
-    const progress = popup.getByRole('region', { name: 'Run progress' });
+    const progress = sp.locator('.build-card');
     await expect(progress).toBeVisible();
     await expect(progress.getByText(workflowName)).toBeVisible();
 
     // wait for a terminal state shown in the UI
-    await expect(progress.getByRole('status')).toContainText(/Passed|Failed|Partially completed/, {
-      timeout: 180_000,
-    });
-    await expect(progress.getByRole('status')).toContainText('Passed');
+    const summary = progress.locator('.build-summary__count');
+    await expect(summary).toHaveText(/Passed|Failed|Partially completed/, { timeout: 180_000 });
+    await expect(summary).toHaveText('Passed');
     await expect(progress.getByRole('list', { name: 'Checkpoints' })).toContainText('uploaded');
 
     // The backend agrees, and artifacts exist for BOTH checkpoints.
@@ -190,7 +200,13 @@ test.describe('Workflow replay (real extension, runner and Percy)', () => {
 
     // History lists the build after the run
     await progress.getByRole('button', { name: 'Close' }).click();
-    await expect(popup.getByRole('list', { name: 'Build history' })).toContainText(workflowName);
+    // The page has two tables (snapshot queue and workflow builds); the builds
+    // table is the one with a "Workflow" column.
+    const buildsTable = sp.locator('table.snapshot-table').filter({
+      has: sp.getByRole('columnheader', { name: 'Workflow' }),
+    });
+    await expect(buildsTable.getByRole('cell', { name: workflowName, exact: true }).first()).toBeVisible();
+    await sp.close();
   });
 
   test('a build started earlier is still listed after a second request (prior builds remain)', async ({ request }) => {

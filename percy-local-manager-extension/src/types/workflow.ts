@@ -18,6 +18,17 @@ export interface Target {
   fallbacks?: Target[];
 }
 
+export interface SnapshotStepOptions {
+  widths?: number[];
+  minHeight?: number;
+  scope?: string;
+  enableJavaScript?: boolean;
+  percyCSS?: string;
+}
+
+/** Default intentional wait before a recorded snapshot is captured. */
+export const DEFAULT_SNAPSHOT_WAIT_MS = 4000;
+
 export interface WorkflowStep {
   id: string;
   type: StepType;
@@ -32,6 +43,10 @@ export interface WorkflowStep {
   name?: string;
   scrollX?: number;
   scrollY?: number;
+  /** Snapshot only: intentional wait (ms) before capturing. */
+  waitMs?: number;
+  /** Snapshot only: per-snapshot Percy options. */
+  options?: SnapshotStepOptions;
 }
 
 export interface WorkflowSettings {
@@ -69,7 +84,7 @@ export type RecorderMessage =
   | { kind: 'rec:resume' }
   | { kind: 'rec:get' }
   | { kind: 'rec:clear' }
-  | { kind: 'rec:snapshot'; name: string }
+  | { kind: 'rec:snapshot'; name: string; waitMs?: number; options?: SnapshotStepOptions }
   | { kind: 'rec:save'; name: string }
   | { kind: 'rec:setSteps'; steps: WorkflowStep[] }
   | { kind: 'rec:event'; step: Omit<WorkflowStep, 'id'> };

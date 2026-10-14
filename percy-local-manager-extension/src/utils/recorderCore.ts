@@ -1,4 +1,4 @@
-import type { StepType, Target, WorkflowStep } from '../types/workflow';
+import type { SnapshotStepOptions, StepType, Target, WorkflowStep } from '../types/workflow';
 
 /**
  * Pure helpers shared by the content script (inlined at build time by Vite)
@@ -42,15 +42,61 @@ export function isGeneratedId(id: string): boolean {
   return false;
 }
 
-/** Ordered locator preference: test id, role+name, id/css, text. */
-export function rankTarget(candidates: Target): Target {
+/**
+ * True for CSS classes that are build-generated or state-driven (CSS-in-JS
+ * hashes, CSS-module suffixes, state toggles). They change between builds or
+ * while the user interacts, so they are never used as a locator.
+ */
+export function isUnstableClass(cls: string): boolean {
+  if (!cls) return true;
+  if (/^(css|sc|jsx|svelte|emotion|styled)-/i.test(cls)) return true;
+  if (/_[A-Za-z0-9]{5,}$/.test(cls) && /[0-9]/.test(cls.split('_').pop() ?? '')) return true; // CSS-module hash
+  if (/\d{3,}/.test(cls)) return true;
+  if (/^(active|selected|open|opened|closed|hover|focus|focused|disabled|enabled|show|shown|hide|hidden|visible|loading|loaded|checked|expanded|collapsed|current|is-.+|has-.+|ng-.+|js-.+)$/i.test(cls)) return true;
+  if (/^[a-z]{1,2}[A-Z0-9][A-Za-z0-9]{4,}$/.test(cls)) return true; // minified e.g. aB3xYz
+  return false;
+}
+
+/**
+ * True for text that changes between visits (counters, prices, dates, bare
+ * numbers) or is too short to identify an element ("X", "0", "+").
+ */
+export function isDynamicText(text: string): boolean {
+  const t = text.trim();
+  if (t.length < 2) return true;
+  if (/^[\d\s.,:/$\u20ac\u00a3\u00a5%+\-()]+$/.test(t)) return true;
+  if (/\d{2,}/.test(t) && t.length <= 12) return true;
+  return false;
+}
+
+/** Drop duplicate candidates, keeping the first (highest-priority) occurrence. */
+export function dedupeTargets(list: Target[]): Target[] {
+  const seen = new Set<string>();
+  const out: Target[] = [];
+  for (const t of list) {
+    const { fallbacks: _f, ...own } = t;
+    const key = JSON.stringify(own);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(own);
+  }
+  return out;
+}
+
+/**
+ * Ordered locator preference: test id, role+name, then extra stable css
+ * candidates (id, attributes, stable classes, scoped paths), then text. Extra
+ * css candidates are passed in `cssList`, best first.
+ */
+export function rankTarget(candidates: Target, cssList: string[] = []): Target {
   const all: Target[] = [];
   if (candidates.testId) all.push({ testId: candidates.testId });
   if (candidates.role && candidates.name) all.push({ role: candidates.role, name: candidates.name });
   if (candidates.css) all.push({ css: candidates.css });
+  for (const c of cssList) all.push({ css: c });
   if (candidates.text) all.push({ text: candidates.text });
   if (all.length === 0) return candidates;
-  const [primary, ...rest] = all;
+  const [primary, ...rest] = dedupeTargets(all);
   return rest.length ? { ...primary, fallbacks: rest } : primary;
 }
 
@@ -95,17 +141,21 @@ export function appendStep(
   return [...steps, { ...step, id: stepId(steps.length) } as WorkflowStep];
 }
 
-export function addSnapshot(steps: WorkflowStep[], name: string): WorkflowStep[] {
+export function addSnapshot(
+  steps: WorkflowStep[],
+  name: string,
+  extras: { waitMs?: number; options?: SnapshotStepOptions } = {},
+): WorkflowStep[] {
   const existing = steps.filter((s) => s.type === 'snapshot').map((s) => s.checkpointId ?? '');
-  return [
-    ...steps,
-    {
-      id: stepId(steps.length),
-      type: 'snapshot' as StepType,
-      checkpointId: checkpointIdFor(name, existing),
-      name: name.trim() || 'Snapshot',
-    },
-  ];
+  const step: WorkflowStep = {
+    id: stepId(steps.length),
+    type: 'snapshot' as StepType,
+    checkpointId: checkpointIdFor(name, existing),
+    name: name.trim() || 'Snapshot',
+    waitMs: extras.waitMs ?? 4000,
+  };
+  if (extras.options && Object.keys(extras.options).length > 0) step.options = extras.options;
+  return [...steps, step];
 }
 
 /** Re-number ids after edits/deletes so they stay unique and ordered. */

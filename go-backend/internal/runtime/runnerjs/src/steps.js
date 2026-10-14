@@ -33,6 +33,8 @@ export async function navigate(page, url, requestedTimeoutMs) {
   const timeout = Math.max(requestedTimeoutMs || 0, MIN_NAV_TIMEOUT_MS);
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout });
   await page.waitForLoadState('load', { timeout: 10000 }).catch(() => {});
+  // Best effort: let client-side apps finish rendering before the next action.
+  await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
 }
 
 export const executors = {

@@ -108,3 +108,28 @@ test('renumber keeps ids unique and ordered after deletes', () => {
   ];
   assert.deepEqual(core.renumber(steps).map((s) => s.id), ['step_001', 'step_002', 'step_003']);
 });
+
+test('addSnapshot defaults to a 4s wait and stores options only when given', () => {
+  let steps = core.addSnapshot([], 'Home');
+  assert.equal(steps[0].waitMs, 4000);
+  assert.equal(steps[0].options, undefined);
+
+  steps = core.addSnapshot(steps, 'Custom', {
+    waitMs: 1500,
+    options: { widths: [375], minHeight: 700, scope: '#app', enableJavaScript: true, percyCSS: '.a{}' },
+  });
+  assert.equal(steps[1].waitMs, 1500);
+  assert.deepEqual(steps[1].options.widths, [375]);
+  assert.equal(steps[1].options.scope, '#app');
+
+  // zero is a valid explicit choice (no wait), not replaced by the default
+  steps = core.addSnapshot(steps, 'NoWait', { waitMs: 0, options: {} });
+  assert.equal(steps[2].waitMs, 0);
+  assert.equal(steps[2].options, undefined);
+});
+
+test('renumber preserves snapshot waitMs/options', () => {
+  const steps = core.renumber([{ id: 'x', type: 'snapshot', checkpointId: 'a', name: 'A', waitMs: 2000, options: { scope: '.s' } }]);
+  assert.equal(steps[0].waitMs, 2000);
+  assert.equal(steps[0].options.scope, '.s');
+});

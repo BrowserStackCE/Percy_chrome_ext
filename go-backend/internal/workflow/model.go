@@ -15,6 +15,15 @@ type Target struct {
 	Fallbacks []Target `json:"fallbacks,omitempty"`
 }
 
+// SnapshotOptions are the per-snapshot Percy options (snapshot steps only).
+type SnapshotOptions struct {
+	Widths           []int  `json:"widths,omitempty"`
+	MinHeight        int    `json:"minHeight,omitempty"`
+	Scope            string `json:"scope,omitempty"`
+	EnableJavaScript bool   `json:"enableJavaScript,omitempty"`
+	PercyCSS         string `json:"percyCSS,omitempty"`
+}
+
 type Step struct {
 	ID           string  `json:"id"`
 	Type         string  `json:"type"`
@@ -29,6 +38,10 @@ type Step struct {
 	Name         string  `json:"name,omitempty"`         // snapshot display name
 	ScrollX      int     `json:"scrollX,omitempty"`
 	ScrollY      int     `json:"scrollY,omitempty"`
+
+	// Snapshot-only: intentional wait before capture and Percy options.
+	WaitMs  int              `json:"waitMs,omitempty"`
+	Options *SnapshotOptions `json:"options,omitempty"`
 }
 
 type Viewport struct {

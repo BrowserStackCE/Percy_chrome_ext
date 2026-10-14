@@ -133,14 +133,17 @@ test.describe('Workflow recorder (real extension)', () => {
   });
 
   test('saved workflow round-trips through the Go API and survives a popup reload', async ({ request }) => {
+    // Re-open the popup so `rec()` has a valid page to evaluate against (Chrome
+    // closes extension popup pages when they lose focus between tests).
+    await openPopup();
     const state = await rec({ kind: 'rec:get' });
     expect(state.steps.length).toBeGreaterThan(0);
 
-    // Save through the popup UI (real WorkflowPanel + workflowApi).
-    await popup.reload();
-    await popup.getByLabel('Workflow name').fill('Login journey');
-    await popup.getByRole('button', { name: 'Save Workflow' }).click();
-    await expect(popup.getByText('✓ Saved "Login journey"')).toBeVisible();
+    // Save through the floating widget on the page (content script renders it after rec:stop).
+    await page.bringToFront();
+    await page.getByPlaceholder('Workflow name').fill('Login journey');
+    await page.getByRole('button', { name: 'Save Workflow' }).click();
+    await expect(page.getByText('✓ Saved "Login journey"')).toBeVisible();
 
     const list = await (await request.get(`${BACKEND}/api/workflows`)).json();
     // Earlier runs may leave same-named workflows behind; take the newest one.
@@ -152,9 +155,11 @@ test.describe('Workflow recorder (real extension)', () => {
     expect(saved.steps.some((s) => s.type === 'snapshot' && s.checkpointId === 'dashboard')).toBe(true);
     expect(JSON.stringify(saved)).not.toContain('hunter2-SECRET');
 
-    // "Retrieve after reloading the extension"
-    await popup.reload();
-    await expect(popup.locator(`option[value="${saved.workflowId}"]`)).toBeAttached();
+    // Verify the saved workflow appears in the snapshots page workflow selector.
+    const snapshotsPage = await context.newPage();
+    await snapshotsPage.goto(`chrome-extension://${extensionId}/snapshots.html`);
+    await expect(snapshotsPage.locator(`option[value="${saved.workflowId}"]`)).toBeAttached();
+    await snapshotsPage.close();
   });
 
   test('Save is blocked until at least one snapshot checkpoint exists', async () => {
@@ -163,9 +168,114 @@ test.describe('Workflow recorder (real extension)', () => {
     await page.waitForTimeout(300);
     await page.getByRole('button', { name: 'Sign in' }).click();
     await rec({ kind: 'rec:stop' });
-    await popup.reload();
-    await popup.getByLabel('Workflow name').fill('No checkpoint');
-    await expect(popup.getByRole('button', { name: 'Save Workflow' })).toBeDisabled();
+    // The floating widget on the page shows the save form after rec:stop.
+    await page.bringToFront();
+    await page.getByPlaceholder('Workflow name').fill('No checkpoint');
+    await expect(page.getByRole('button', { name: 'Save Workflow' })).toBeDisabled();
     await rec({ kind: 'rec:clear' });
+  });
+  test('widget Capture Snapshot defaults to a 4s wait and stores advanced options', async () => {
+    await openPopup();
+    await page.bringToFront();
+    await rec({ kind: 'rec:start' });
+    await page.waitForTimeout(300);
+
+    // Default: wait field shows 4 and the stored step has waitMs 4000 and the
+    // popup-equivalent default widths (375, 1280).
+    await expect(page.getByLabel('Wait before capture (seconds, default 4)')).toHaveValue('4');
+    await page.getByPlaceholder('Defaults to "Checkpoint N"').fill('Defaults');
+    await page.getByRole('button', { name: 'Capture Snapshot' }).click();
+    await expect.poll(async () => (await rec({ kind: 'rec:get' })).steps.length).toBe(1);
+
+    // Custom wait + advanced options.
+    await page.getByPlaceholder('Defaults to "Checkpoint N"').fill('Custom');
+    await page.getByLabel('Wait before capture (seconds, default 4)').fill('2');
+    await page.getByRole('button', { name: /Advanced snapshot options/ }).click();
+    await page.getByRole('spinbutton', { name: 'Width 1', exact: true }).fill('320');
+    await page.getByRole('spinbutton', { name: 'Width 2', exact: true }).fill('1440');
+    await page.getByPlaceholder('.main-content').fill('#app');
+    await page.getByLabel('Enable JavaScript').check();
+    await page.getByPlaceholder('.modal { display: none; }').fill('.x{display:none}');
+    await page.getByRole('button', { name: 'Capture Snapshot' }).click();
+    await expect.poll(async () => (await rec({ kind: 'rec:get' })).steps.length).toBe(2);
+
+    const state = await rec({ kind: 'rec:get' });
+    expect(state.steps[0]).toMatchObject({ checkpointId: 'defaults', waitMs: 4000 });
+    expect(state.steps[0].options).toEqual({ widths: [375, 1280] });
+    expect(state.steps[1].waitMs).toBe(2000);
+    expect(state.steps[1].options).toMatchObject({
+      widths: [320, 1440], scope: '#app', enableJavaScript: true, percyCSS: '.x{display:none}',
+    });
+
+    // Invalid wait is rejected inline and nothing is added.
+    await page.getByLabel('Wait before capture (seconds, default 4)').fill('120');
+    await page.getByRole('button', { name: 'Capture Snapshot' }).click();
+    await expect(page.getByText('Wait must be between 0 and 60 seconds.')).toBeVisible();
+    expect((await rec({ kind: 'rec:get' })).steps.length).toBe(2);
+
+    // The widget keeps the invalid draft and its error banner until a capture
+    // succeeds. Correct the wait and capture once more so the widget is left
+    // clean for the next test.
+    await page.getByLabel('Wait before capture (seconds, default 4)').fill('4');
+    await page.getByRole('button', { name: 'Capture Snapshot' }).click();
+    await expect.poll(async () => (await rec({ kind: 'rec:get' })).steps.length).toBe(3);
+    await expect(page.getByText('Wait must be between 0 and 60 seconds.')).toBeHidden();
+
+    // The Advanced section stays expanded across tests and pushes the step list
+    // below the viewport edge; collapse it so the next test starts clean.
+    await page.getByRole('button', { name: /Advanced snapshot options/ }).click();
+    await expect(page.getByLabel('Enable JavaScript')).toBeHidden();
+    await rec({ kind: 'rec:clear' });
+  });
+
+  test('a snapshot step can be edited in the widget while still recording', async () => {
+    await openPopup();
+    await page.bringToFront();
+    await rec({ kind: 'rec:start' });
+    await page.waitForTimeout(300);
+    await rec({ kind: 'rec:snapshot', name: 'Before edit' });
+
+    await page.getByTitle('Edit step').first().click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel('Snapshot name', { exact: true }).fill('After edit');
+    await dialog.getByLabel('Wait before capture (seconds)').fill('7');
+    await dialog.getByRole('button', { name: 'Save step' }).click();
+
+    await expect.poll(async () => (await rec({ kind: 'rec:get' })).steps[0]?.name).toBe('After edit');
+    const state = await rec({ kind: 'rec:get' });
+    expect(state.active).toBe(true); // recording continues
+    expect(state.steps[0].waitMs).toBe(7000);
+    await rec({ kind: 'rec:clear' });
+  });
+
+  test('Snapshots page edits a saved workflow and persists via PUT', async ({ request }) => {
+    const created = await (
+      await request.post(`${BACKEND}/api/workflows`, {
+        data: {
+          name: `Editable ${Date.now()}`,
+          schemaVersion: 1,
+          startUrl: `${SITE}/login`,
+          settings: { defaultTimeoutMs: 10000, viewport: { width: 1280, height: 800 } },
+          steps: [{ id: 'step_001', type: 'snapshot', checkpointId: 'home', name: 'Home', waitMs: 4000 }],
+        },
+      })
+    ).json();
+
+    const sp = await context.newPage();
+    await sp.goto(`chrome-extension://${extensionId}/snapshots.html`);
+    await sp.locator('#wf-select').selectOption(created.workflowId);
+    await sp.getByRole('button', { name: 'Edit workflow' }).click();
+    await sp.getByRole('button', { name: 'Edit step 1' }).click();
+    await sp.getByLabel('Wait before capture (seconds)').fill('9');
+    await sp.getByLabel('Scope').fill('#main');
+    await sp.getByRole('button', { name: 'Save step' }).click();
+    await sp.getByRole('button', { name: 'Save changes' }).click();
+    await expect(sp.getByRole('button', { name: 'Edit workflow' })).toBeVisible();
+
+    const saved = await (await request.get(`${BACKEND}/api/workflows/${created.workflowId}`)).json();
+    expect(saved.version).toBe(1); // PUT overwrites in place; the version does not change
+    expect(saved.steps[0].waitMs).toBe(9000);
+    expect(saved.steps[0].options.scope).toBe('#main');
+    await sp.close();
   });
 });

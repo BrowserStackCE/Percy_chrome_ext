@@ -1373,3 +1373,9 @@ body {
 .run-step--failed { color: var(--error-700, #b91c1c); }
 .run-step--skipped, .run-step--pending { opacity: 0.6; }
 .run-step__error { font-weight: 400; }
+
+.recorded-step__confirm {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--error-600, #d6403a);
+}

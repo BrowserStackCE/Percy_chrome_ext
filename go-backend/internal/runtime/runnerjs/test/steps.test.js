@@ -247,3 +247,53 @@ test('path-unsafe checkpoint ids cannot write outside the artifact dir', async (
   assert.equal(result, EXIT.FAILED);
   assert.deepEqual((await readdir(path.dirname(artifactDir))).filter((n) => n === 'escape.html'), []);
 });
+
+test('snapshot waits waitMs before capture and forwards Percy options', async () => {
+  const percy = await percyStub();
+  const artifactDir = await mkdtemp(path.join(tmpdir(), 'wf-'));
+  const steps = [
+    {
+      id: 'step_001',
+      type: 'snapshot',
+      checkpointId: 'opts',
+      name: 'Opts',
+      waitMs: 1200,
+      options: { widths: [375, 1280], minHeight: 800, scope: '#app', enableJavaScript: true, percyCSS: '.x{display:none}' },
+    },
+  ];
+  const t0 = Date.now();
+  const { result } = await capture(() =>
+    runWorkflow({ buildId: 'build_o', artifactDir, percyUrl: percy.url, secrets: {}, workflow: wf(steps) }),
+  );
+  const elapsed = Date.now() - t0;
+  percy.close();
+
+  assert.equal(result, EXIT.PASSED);
+  assert.ok(elapsed >= 1200, `expected the intentional wait, took ${elapsed}ms`);
+  const body = percy.received[0];
+  assert.deepEqual(body.widths, [375, 1280]);
+  assert.equal(body.minHeight, 800);
+  assert.equal(body.scope, '#app');
+  assert.equal(body.enableJavaScript, true);
+  assert.equal(body.percyCSS, '.x{display:none}');
+});
+
+test('legacy snapshot without waitMs/options keeps viewport widths and does not wait', async () => {
+  const percy = await percyStub();
+  const artifactDir = await mkdtemp(path.join(tmpdir(), 'wf-'));
+  const steps = [{ id: 'step_001', type: 'snapshot', checkpointId: 'legacy', name: 'Legacy' }];
+  const t0 = Date.now();
+  const { result } = await capture(() =>
+    runWorkflow({ buildId: 'build_l', artifactDir, percyUrl: percy.url, secrets: {}, workflow: wf(steps) }),
+  );
+  const elapsed = Date.now() - t0;
+  percy.close();
+
+  assert.equal(result, EXIT.PASSED);
+  assert.ok(elapsed < 1200, `legacy snapshot should not add a wait, took ${elapsed}ms`);
+  const body = percy.received[0];
+  assert.deepEqual(body.widths, [900]);
+  assert.equal(body.minHeight, 600);
+  assert.equal(body.scope, undefined);
+  assert.equal(body.percyCSS, undefined);
+});

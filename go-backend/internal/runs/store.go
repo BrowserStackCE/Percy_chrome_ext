@@ -120,6 +120,11 @@ func (s *Store) List() ([]Build, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	entries, err := os.ReadDir(s.dir)
+	if errors.Is(err, os.ErrNotExist) {
+		// The builds folder can be removed while the server runs (cleanup or
+		// reinstall). That means no builds yet, not a failure.
+		return []Build{}, nil
+	}
 	if err != nil {
 		return nil, err
 	}

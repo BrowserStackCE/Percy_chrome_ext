@@ -24,6 +24,12 @@ const (
 	maxSteps       = 500
 	maxTimeoutMs   = 300000
 	maxLiteralSize = 2000
+	maxWaitMs      = 60000
+	maxWidths      = 10
+	maxWidth       = 4000
+	maxMinHeight   = 20000
+	maxScopeLen    = 500
+	maxCSSLen      = 10000
 )
 
 // ValidationError marks an error caused by invalid user input (HTTP 400).
@@ -107,6 +113,15 @@ func (w *Workflow) validate() error {
 		if s.ValueRef != "" && !regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,63}$`).MatchString(s.ValueRef) {
 			return fmt.Errorf("%s: invalid valueRef", at)
 		}
+		if s.Type != "snapshot" && (s.WaitMs != 0 || s.Options != nil) {
+			return fmt.Errorf("%s: waitMs and options are only allowed on snapshot steps", at)
+		}
+		if s.WaitMs < 0 || s.WaitMs > maxWaitMs {
+			return fmt.Errorf("%s: waitMs must be 0..%d", at, maxWaitMs)
+		}
+		if err := validateOptions(s.Options); err != nil {
+			return fmt.Errorf("%s: %w", at, err)
+		}
 		switch s.Type {
 		case "fill":
 			if s.Value == "" && s.ValueRef == "" {
@@ -143,6 +158,30 @@ func (w *Workflow) validate() error {
 				return fmt.Errorf("%s: snapshot requires a name", at)
 			}
 		}
+	}
+	return nil
+}
+
+func validateOptions(o *SnapshotOptions) error {
+	if o == nil {
+		return nil
+	}
+	if len(o.Widths) > maxWidths {
+		return fmt.Errorf("options.widths allows at most %d entries", maxWidths)
+	}
+	for _, w := range o.Widths {
+		if w < 1 || w > maxWidth {
+			return fmt.Errorf("options.widths entries must be 1..%d", maxWidth)
+		}
+	}
+	if o.MinHeight < 0 || o.MinHeight > maxMinHeight {
+		return fmt.Errorf("options.minHeight must be 0..%d", maxMinHeight)
+	}
+	if len(o.Scope) > maxScopeLen {
+		return fmt.Errorf("options.scope too long")
+	}
+	if len(o.PercyCSS) > maxCSSLen {
+		return fmt.Errorf("options.percyCSS too long")
 	}
 	return nil
 }

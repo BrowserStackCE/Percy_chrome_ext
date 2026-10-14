@@ -150,3 +150,47 @@ func TestConcurrentUpdatesLeaveValidFile(t *testing.T) {
 		}
 	}
 }
+
+func TestSnapshotWaitAndOptionsValid(t *testing.T) {
+	w := valid()
+	w.Steps[3].WaitMs = 4000
+	w.Steps[3].Options = &SnapshotOptions{Widths: []int{375, 1280}, MinHeight: 1024, Scope: ".main", EnableJavaScript: true, PercyCSS: ".a{}"}
+	if err := w.Validate(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSnapshotWaitAndOptionsRejects(t *testing.T) {
+	cases := map[string]func(w *Workflow){
+		"negative wait":      func(w *Workflow) { w.Steps[3].WaitMs = -1 },
+		"wait too large":     func(w *Workflow) { w.Steps[3].WaitMs = 60001 },
+		"wait on click":      func(w *Workflow) { w.Steps[1].WaitMs = 1000 },
+		"options on click":   func(w *Workflow) { w.Steps[1].Options = &SnapshotOptions{Scope: ".a"} },
+		"zero width":         func(w *Workflow) { w.Steps[3].Options = &SnapshotOptions{Widths: []int{0}} },
+		"huge width":         func(w *Workflow) { w.Steps[3].Options = &SnapshotOptions{Widths: []int{99999}} },
+		"too many widths":    func(w *Workflow) { w.Steps[3].Options = &SnapshotOptions{Widths: make([]int, 11)} },
+		"negative minHeight": func(w *Workflow) { w.Steps[3].Options = &SnapshotOptions{MinHeight: -5} },
+		"css too long":       func(w *Workflow) { w.Steps[3].Options = &SnapshotOptions{PercyCSS: strings.Repeat("a", 10001)} },
+		"scope too long":     func(w *Workflow) { w.Steps[3].Options = &SnapshotOptions{Scope: strings.Repeat("a", 501)} },
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			w := valid()
+			mutate(w)
+			if err := w.Validate(); err == nil {
+				t.Fatal("expected validation error")
+			}
+		})
+	}
+}
+
+// Workflows saved before waitMs/options existed must still load and validate.
+func TestLegacySnapshotStepStillValid(t *testing.T) {
+	w := valid() // snapshot step has no WaitMs/Options
+	if w.Steps[3].WaitMs != 0 || w.Steps[3].Options != nil {
+		t.Fatal("fixture should be legacy-shaped")
+	}
+	if err := w.Validate(); err != nil {
+		t.Fatal(err)
+	}
+}

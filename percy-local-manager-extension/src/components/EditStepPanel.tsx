@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Target, WorkflowStep } from '../types/workflow';
+import { SnapshotOptionsFields, draftFromStep, parseDraft } from './SnapshotOptionsFields';
 
 interface EditStepPanelProps {
   step: WorkflowStep;
@@ -21,6 +22,7 @@ export function EditStepPanel({ step, onSave, onCancel }: EditStepPanelProps) {
   const [value, setValue] = useState(step.value ?? '');
   const [valueRef, setValueRef] = useState(step.valueRef ?? '');
   const [timeout, setTimeoutMs] = useState(step.timeoutMs ? String(step.timeoutMs) : '');
+  const [snapDraft, setSnapDraft] = useState(() => draftFromStep(step.waitMs, step.options));
   const [error, setError] = useState<string | null>(null);
 
   const usesRef = Boolean(step.valueRef);
@@ -50,6 +52,15 @@ export function EditStepPanel({ step, onSave, onCancel }: EditStepPanelProps) {
       label: label.trim() || undefined,
       timeoutMs: ms || undefined,
     };
+    if (step.type === 'snapshot') {
+      const parsed = parseDraft(snapDraft);
+      if ('error' in parsed) {
+        setError(parsed.error);
+        return;
+      }
+      updated.waitMs = parsed.waitMs;
+      updated.options = parsed.options;
+    }
     if (hasTarget) updated.target = target;
     if (hasValue) {
       if (usesRef) updated.valueRef = valueRef;
@@ -83,6 +94,7 @@ export function EditStepPanel({ step, onSave, onCancel }: EditStepPanelProps) {
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
+          <SnapshotOptionsFields idPrefix={id} value={snapDraft} onChange={setSnapDraft} />
         </>
       )}
 
