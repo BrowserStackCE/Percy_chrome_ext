@@ -1,9 +1,9 @@
 # Percy Local Manager
 
-A lightweight **Visual Testing Companion** that abstracts Percy server management for Manual QA Engineers. Start the server, use the Chrome extension to capture snapshots, and finalize the build — no terminal knowledge required.
+A lightweight **Visual Testing Companion** that abstracts Percy server management for Manual QA Engineers. Start the server, use the Chrome extension to capture snapshots or record multi-step workflows, and finalize the build — no terminal knowledge required.
 
 ```
-Chrome Extension → HTTP (localhost:4321) → Go Backend → Percy CLI → Percy Cloud
+Chrome Extension → HTTP (localhost:4321) → Go Backend → Percy CLI / Playwright → Percy Cloud
 ```
 
 ---
@@ -14,18 +14,29 @@ Percy Local Manager consists of three components that work together:
 
 | Component | Technology | Role |
 |---|---|---|
-| **Go Backend** | Go | Central controller — manages Percy CLI, exposes local HTTP API, queues snapshots |
-| **Chrome Extension** | React + TypeScript + Vite (MV3) | Captures DOM, URL, and viewport; sends snapshots to the backend |
+| **Go Backend** | Go | Central controller — manages Percy CLI, exposes local HTTP API, queues snapshots, stores and replays workflows |
+| **Chrome Extension** | React + TypeScript + Vite (MV3) | Captures DOM snapshots; records multi-step workflows; replays them via Playwright |
 
 ---
 
 ## User Workflow
+
+### Manual Snapshot Capture
 
 1. Start the Go backend server (distributable or `go run`)
 2. Install the Chrome extension
 3. Navigate to any page in Chrome and click **Capture** in the extension popup
 4. Snapshots are queued in the backend
 5. Click **Finalize Build** in the extension to upload all snapshots to Percy
+
+### Workflow Recorder (multi-step)
+
+1. Start the Go backend server
+2. Open the extension popup and click **Record**
+3. Interact with the page — clicks, form fills, selects, and scrolls are captured automatically
+4. Click **Capture Snapshot** in the floating panel to mark Percy checkpoints
+5. Click **Stop**, review the recorded steps, then **Save** the workflow
+6. Click **Replay** on any saved workflow — the backend drives Playwright headlessly, takes Percy snapshots at each checkpoint, and finalizes the build
 
 ---
 
@@ -36,22 +47,27 @@ Percy_chrome_ext/
 ├── go-backend/                  # Go HTTP server + Percy process manager
 │   ├── cmd/server/main.go       # Entry point — starts server on :4321
 │   └── internal/
-│       ├── api/                 # Router + HTTP handlers
+│       ├── api/                 # Router + HTTP handlers (snapshots, build, workflows, runs)
 │       ├── app/                 # Application wiring
 │       ├── library/             # Percy snapshot library (cache, client, service)
 │       ├── middleware/          # CORS, logger, recovery, chain
 │       ├── percy/               # Percy CLI binary management + controller
+│       ├── runs/                # Workflow run lifecycle (service, store, pump, adapters)
+│       ├── runtime/             # Playwright installer + embedded runner JS
 │       ├── service/             # Build and snapshot business logic
-│       └── snapshot/            # In-memory snapshot store
+│       ├── snapshot/            # In-memory snapshot store
+│       └── workflow/            # Workflow model, JSON store, validator
 │
 ├── percy-local-manager-extension/   # Chrome Extension source (build from here)
 │   ├── src/
+│   │   ├── background/          # Service worker — owns recording state (recorder.ts)
+│   │   ├── content/             # Injected page scripts — event capture (recorder.ts) + floating widget
 │   │   ├── popup/               # Extension popup UI
-│   │   ├── components/          # React UI components
-│   │   ├── hooks/               # Connection status, queue, capture, finalize hooks
-│   │   ├── services/            # DOM capture + backend API client
-│   │   ├── types/               # Shared TypeScript types
-│   │   └── utils/               # Constants (backend URL, endpoints)
+│   │   ├── components/          # React UI components (WorkflowPanel, RecordedSteps, RunProgress…)
+│   │   ├── hooks/               # useRecorder, useWorkflows, useRun, finalize, capture hooks
+│   │   ├── services/            # DOM capture + backend API client + workflowApi
+│   │   ├── types/               # Shared TypeScript types (workflow.ts, build.ts)
+│   │   └── utils/               # Constants, recorderCore (pure locator helpers)
 │   ├── public/manifest.json     # Chrome Manifest V3
 │   └── package.json
 │
@@ -189,6 +205,25 @@ Base URL: `http://localhost:4321`
 | Method | Endpoint | Description |
 |---|---|---|
 | `POST` | `/build/finalize` | Upload all queued snapshots to Percy — returns `{ buildId, buildUrl }` |
+| `GET` | `/build/finalize/stream` | SSE stream of build progress — events: `progress`, `done`, `error` |
+
+### Workflows
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/workflows` | Save a recorded workflow — `{ name, startUrl, steps, settings }` |
+| `GET` | `/workflows` | List all saved workflows |
+| `GET` | `/workflows/:id` | Get a single workflow |
+| `DELETE` | `/workflows/:id` | Delete a workflow |
+
+### Runs (Workflow Replay)
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/runs` | Start a workflow replay — `{ workflowId, token }` — returns `{ runId }` |
+| `GET` | `/runs/:id` | Get run status and progress |
+| `GET` | `/runs/:id/stream` | SSE stream of run log lines |
+| `DELETE` | `/runs/:id` | Cancel a running workflow |
 
 ### Library
 
@@ -204,28 +239,59 @@ Base URL: `http://localhost:4321`
 ## Architecture
 
 ```
-+---------------------+
-| Chrome Extension    |
-+----------+----------+
-           |
-     HTTP localhost:4321
-           |
-+----------v----------+
-|    Go Backend       |
-|---------------------|
-| Percy Controller    |  ← spawns & monitors percy-cli
-| Snapshot Store      |  ← in-memory queue
-| Build Service       |  ← finalizes Percy build
-| Library Service     |  ← snapshot library cache
-| HTTP API            |  ← serves Chrome extension
-+----------+----------+
-           |
-     spawn process
-           |
-    percy-cli exec:start
-           |
-     Percy Cloud
++-----------------------------------------------+
+| Chrome Extension                              |
+|-----------------------------------------------|
+| Popup UI (React)                              |
+| Background Service Worker                     |  ← owns recording state (MV3)
+| Content Script (injected per page)            |  ← captures clicks/fills/scrolls
++------------------------+----------------------+
+                         |
+                   HTTP localhost:4321
+                         |
++------------------------v----------------------+
+|    Go Backend                                 |
+|-----------------------------------------------|
+| Percy Controller    ← spawns percy-cli        |
+| Snapshot Store      ← in-memory queue         |
+| Build Service       ← finalizes build (SSE)   |
+| Workflow Store      ← persists workflows JSON  |
+| Runs Service        ← drives Playwright replay |
+| Runtime             ← installs Playwright      |
+| Library Service     ← snapshot library cache   |
+| HTTP API            ← serves Chrome extension  |
++----------+--------------------+----------------+
+           |                    |
+     percy-cli exec:start    Playwright (headless)
+           |                    |
+     Percy Cloud         Percy snapshots at checkpoints
 ```
+
+---
+
+## Recorder — How It Works
+
+The recorder captures a multi-step user journey in the browser and replays it headlessly to take Percy snapshots at consistent checkpoints.
+
+### Recording (Extension)
+
+1. **User clicks Record** in the popup → popup sends `rec:start` to the background service worker.
+2. **Background worker** (`src/background/recorder.ts`) queries the active tab, injects `content.js` if needed, measures the viewport, and persists `RecordingState` to `chrome.storage.session` (survives popup close).
+3. **Content script** (`src/content/recorder.ts`) attaches `click`, `change`, `input`, and `scroll` listeners. Each event is converted to a typed `WorkflowStep` and forwarded to the background via `rec:event`.
+4. **Locator strategy** (`src/utils/recorderCore.ts`): prefers `data-testid` → `role+name` → stable CSS (`id`/`name` attribute) → visible text → structural path. Framework-generated IDs (React, Radix, MUI…) are filtered out. Sensitive fields store a `valueRef` instead of the literal value.
+5. **Deduplication**: consecutive fills on the same field collapse to the latest value; consecutive scrolls collapse to the final position.
+6. **Snapshot checkpoints**: clicking **Capture Snapshot** in the floating widget sends `rec:snapshot` → background appends a `snapshot` step with a unique `checkpointId`.
+7. **Full-page navigations** are captured via `chrome.webNavigation.onCommitted`.
+8. **Pause/Resume**: pausing stops capture without discarding steps; resuming adds a `navigate` step if the URL changed while paused.
+9. **Save**: background validates (≥1 snapshot, all interactive steps have a locator), calls `POST /workflows`, and clears session state.
+
+### Replay (Backend)
+
+1. Extension sends `POST /runs` with `{ workflowId, token }`.
+2. **Runs service** (`go-backend/internal/runs/service.go`) starts Percy CLI, then launches the embedded Node runner via Playwright.
+3. **Runner JS** (`go-backend/internal/runtime/runnerjs/src/`) executes each step using Playwright's `page` API and calls `percy.snapshot()` at each `snapshot` step.
+4. **Progress** is streamed to the extension via SSE (`GET /runs/:id/stream`).
+5. The build is finalized automatically when all steps complete.
 
 ---
 
@@ -235,7 +301,8 @@ Base URL: `http://localhost:4321`
 |---|---|
 | Backend | Go (net/http) |
 | Chrome Extension | React 18, TypeScript, Vite, Manifest V3 |
-| Communication | HTTP over localhost |
+| Replay Engine | Node.js + Playwright (installed at runtime by the backend) |
+| Communication | HTTP + SSE over localhost |
 
 ---
 
