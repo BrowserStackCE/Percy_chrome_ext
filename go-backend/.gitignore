@@ -1,6 +1,7 @@
 # Snapshots
 snapshot/
-server
+# Compiled binary only (not the cmd/server/ source directory)
+/server
 
 # Test Companion onboarding (local, per-machine)
 .test-companion/
