@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jostan30/Percy_chrome_ext/go-backend/internal/percy"
 	"github.com/jostan30/Percy_chrome_ext/go-backend/internal/workflow"
 )
 
@@ -20,13 +21,16 @@ type fakePercy struct {
 	stopped int
 	idleErr error
 	startEr error
+	// lastOpts records the branch settings of the most recent Start.
+	lastOpts percy.Options
 }
 
 func (f *fakePercy) EnsureReady() error { return nil }
-func (f *fakePercy) Start(string) error {
+func (f *fakePercy) Start(_ string, opts percy.Options) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.started++
+	f.lastOpts = opts
 	return f.startEr
 }
 func (f *fakePercy) Stop() error {

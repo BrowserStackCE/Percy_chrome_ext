@@ -51,9 +51,11 @@ type PercyAdapter struct {
 	Client     *percy.Client
 }
 
-func (p *PercyAdapter) EnsureReady() error   { return p.Controller.EnsureReady() }
-func (p *PercyAdapter) Start(t string) error { return p.Controller.Start(t) }
-func (p *PercyAdapter) Stop() error          { return p.Controller.Stop() }
+func (p *PercyAdapter) EnsureReady() error { return p.Controller.EnsureReady() }
+func (p *PercyAdapter) Start(t string, opts percy.Options) error {
+	return p.Controller.Start(t, opts)
+}
+func (p *PercyAdapter) Stop() error { return p.Controller.Stop() }
 func (p *PercyAdapter) BuildInfo() (string, string, error) {
 	h, err := p.Client.Health()
 	if err != nil {

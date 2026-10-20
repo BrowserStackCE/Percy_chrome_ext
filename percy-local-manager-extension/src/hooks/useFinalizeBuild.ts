@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { finalizeBuild } from '../services/backendApi';
+import { getStoredBranchSettings } from '../utils/branchStorage';
 import { useBuildStatus } from './useBuildStatus';
 import type { AsyncStatus, BuildStatus, FinalizeBuildResponse } from '../types';
 
@@ -40,7 +41,8 @@ export function useFinalizeBuild(
       setResult(null);
 
       try {
-        await finalizeBuild(token);
+        // Read at trigger time so the build always uses what is saved.
+        await finalizeBuild(token, await getStoredBranchSettings());
         await refresh();
       } catch (err) {
         setStatus('error');

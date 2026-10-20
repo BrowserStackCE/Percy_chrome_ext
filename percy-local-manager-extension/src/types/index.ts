@@ -100,6 +100,16 @@ export type ConnectionStatus = 'checking' | 'connected' | 'offline';
  */
 export type AsyncStatus = 'idle' | 'loading' | 'success' | 'error';
 
+/**
+ * Percy branch settings sent with every build. `branch` maps to PERCY_BRANCH
+ * (default `percy-local-manager`); `targetBranch` maps to PERCY_TARGET_BRANCH
+ * (empty = Percy's normal base-build selection).
+ */
+export interface BranchSettings {
+  branch: string;
+  targetBranch: string;
+}
+
 
 export interface LibraryComparison {
   id: string;

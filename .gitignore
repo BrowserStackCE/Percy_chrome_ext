@@ -10,3 +10,5 @@ tests/log/
 
 # Internal developer context docs (not for commit)
 docs/recorder-context.md
+
+test-website

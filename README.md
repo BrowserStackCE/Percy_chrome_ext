@@ -38,6 +38,30 @@ Percy Local Manager consists of three components that work together:
 5. Click **Stop**, review the recorded steps, then **Save** the workflow
 6. Click **Replay** on any saved workflow — the backend drives Playwright headlessly, takes Percy snapshots at each checkpoint, and finalizes the build
 
+### Branch and Target Branch
+
+Every build is created on a Percy **branch** and can optionally compare against a **target branch**. Both are shown above the **Finalize Build** button and the workflow **Replay / Create Build** button, with a **Default** / **Changed** badge. Your values are saved and reused for the next build; **Reset to default** restores them.
+
+| Setting | Percy variable | Default | What it does |
+|---|---|---|---|
+| Branch | `PERCY_BRANCH` | `percy-local-manager` | The branch the build is created on |
+| Target branch | `PERCY_TARGET_BRANCH` | empty | The branch whose latest build is the baseline. Empty = Percy's normal base-build selection |
+
+The commit id is not configurable here; Percy derives it from git.
+
+Values must not contain spaces or control characters and are limited to 255 characters.
+
+### Compare Two URLs (e.g. staging vs production)
+
+Percy picks a baseline by branch, so to compare two URLs you create one build per URL:
+
+1. Capture or record snapshots against **production**. Use snapshot names that do **not** contain the URL, otherwise the two builds will not match up.
+2. Set **Branch** to `production`, leave **Target branch** empty, and finalize/replay. Wait until this build has finished processing in Percy.
+3. Run the same snapshots against **staging**.
+4. Set **Branch** to `staging` and **Target branch** to `production`, then finalize/replay.
+
+The staging build uses the latest `production` build as its baseline, so Percy shows only the differences between the two URLs.
+
 ---
 
 ## Repository Structure
@@ -204,7 +228,7 @@ Base URL: `http://localhost:4321`
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/build/finalize` | Upload all queued snapshots to Percy — returns `{ buildId, buildUrl }` |
+| `POST` | `/build/finalize` | Upload all queued snapshots to Percy — body `{ token, branch?, targetBranch? }` (both optional; empty = defaults) |
 | `GET` | `/build/finalize/stream` | SSE stream of build progress — events: `progress`, `done`, `error` |
 
 ### Workflows
@@ -220,7 +244,7 @@ Base URL: `http://localhost:4321`
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/runs` | Start a workflow replay — `{ workflowId, token }` — returns `{ runId }` |
+| `POST` | `/api/workflows/{id}/runs` | Start a workflow replay — body `{ token, secrets?, branch?, targetBranch? }` (branch fields optional; empty = defaults) |
 | `GET` | `/runs/:id` | Get run status and progress |
 | `GET` | `/runs/:id/stream` | SSE stream of run log lines |
 | `DELETE` | `/runs/:id` | Cancel a running workflow |

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { listBuilds, updateWorkflow } from '../services/workflowApi';
 import { RecordedSteps } from './RecordedSteps';
+import { BranchSettingsFields } from './BranchSettingsFields';
 import { renumber } from '../utils/recorderCore';
 import { useRun } from '../hooks/useRun';
 import { useWorkflows } from '../hooks/useWorkflows';
@@ -182,6 +183,8 @@ export function WorkflowRunsSection({ token, hasToken, busy }: WorkflowRunsSecti
             ))}
             {needed.length > 0 && <span className="snapshot-edit-help">Used for this run only. Never saved.</span>}
           </div>
+
+          <BranchSettingsFields disabled={run.starting || run.running} />
 
           {!hasToken && (
             <p className="message message--error">

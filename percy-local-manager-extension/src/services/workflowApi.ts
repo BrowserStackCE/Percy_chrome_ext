@@ -1,4 +1,5 @@
 import { ENDPOINTS } from '../utils/constants';
+import type { BranchSettings } from '../types';
 import type { Workflow } from '../types/workflow';
 import type { StartRunResponse, WorkflowBuild } from '../types/build';
 
@@ -55,12 +56,18 @@ export async function startRun(
   token: string,
   idempotencyKey: string,
   secrets?: Record<string, string>,
+  branchSettings?: BranchSettings,
 ): Promise<StartRunResponse> {
   return parse<StartRunResponse>(
     await fetch(`${ENDPOINTS.WORKFLOWS}/${encodeURIComponent(workflowId)}/runs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
-      body: JSON.stringify({ token, secrets }),
+      body: JSON.stringify({
+        token,
+        secrets,
+        branch: branchSettings?.branch,
+        targetBranch: branchSettings?.targetBranch,
+      }),
     }),
   );
 }

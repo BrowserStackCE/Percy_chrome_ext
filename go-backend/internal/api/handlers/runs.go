@@ -12,6 +12,7 @@ import (
 
 	"github.com/jostan30/Percy_chrome_ext/go-backend/internal/app"
 	"github.com/jostan30/Percy_chrome_ext/go-backend/internal/httpx"
+	"github.com/jostan30/Percy_chrome_ext/go-backend/internal/percy"
 	"github.com/jostan30/Percy_chrome_ext/go-backend/internal/runs"
 	"github.com/jostan30/Percy_chrome_ext/go-backend/internal/workflow"
 )
@@ -31,6 +32,10 @@ type runRequest struct {
 	Token string `json:"token"`
 	// Secrets resolves workflow valueRef names for this run only.
 	Secrets map[string]string `json:"secrets,omitempty"`
+	// Branch and TargetBranch are optional PERCY_BRANCH / PERCY_TARGET_BRANCH
+	// overrides. Empty means the defaults.
+	Branch       string `json:"branch,omitempty"`
+	TargetBranch string `json:"targetBranch,omitempty"`
 }
 
 // StartRun handles POST /api/workflows/{workflowId}/runs
@@ -52,7 +57,8 @@ func (h *RunsHandler) StartRun(w http.ResponseWriter, r *http.Request, workflowI
 		writeErr(w, http.StatusBadRequest, "Idempotency-Key too long")
 		return
 	}
-	b, dup, err := h.app.RunService.Start(workflowID, req.Token, key, req.Secrets)
+	opts := percy.Options{Branch: req.Branch, TargetBranch: req.TargetBranch}
+	b, dup, err := h.app.RunService.StartWithOptions(workflowID, req.Token, key, req.Secrets, opts)
 	if err != nil {
 		switch {
 		case errors.Is(err, workflow.ErrNotFound):
@@ -61,7 +67,7 @@ func (h *RunsHandler) StartRun(w http.ResponseWriter, r *http.Request, workflowI
 			writeErr(w, http.StatusBadRequest, "invalid workflow id")
 		case errors.Is(err, runs.ErrBusy):
 			writeErr(w, http.StatusConflict, err.Error())
-		case errors.Is(err, runs.ErrNoToken):
+		case errors.Is(err, runs.ErrNoToken), errors.Is(err, runs.ErrInvalidOptions):
 			writeErr(w, http.StatusBadRequest, err.Error())
 		default:
 			// Keep the real cause visible: a bare message made start failures undiagnosable.

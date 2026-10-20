@@ -18,6 +18,65 @@ const (
 	stopTimeout  = 30 * time.Second
 )
 
+// DefaultBranch is the Percy branch used when the user does not choose one.
+const DefaultBranch = "percy-local-manager"
+
+const maxBranchLen = 255
+
+// Options are the per-build Percy settings a user can override.
+type Options struct {
+	// Branch is PERCY_BRANCH. Empty means DefaultBranch.
+	Branch string `json:"branch,omitempty"`
+	// TargetBranch is PERCY_TARGET_BRANCH. Empty means Percy's normal base-build selection.
+	TargetBranch string `json:"targetBranch,omitempty"`
+}
+
+// Normalize trims whitespace around both values.
+func (o Options) Normalize() Options {
+	return Options{
+		Branch:       strings.TrimSpace(o.Branch),
+		TargetBranch: strings.TrimSpace(o.TargetBranch),
+	}
+}
+
+func validBranchName(name string) error {
+	if len(name) > maxBranchLen {
+		return fmt.Errorf("must be at most %d characters", maxBranchLen)
+	}
+	for _, r := range name {
+		if r <= ' ' || r == 0x7f {
+			return errors.New("must not contain spaces or control characters")
+		}
+	}
+	return nil
+}
+
+// Validate checks the (normalized) values. Empty values are valid.
+func (o Options) Validate() error {
+	n := o.Normalize()
+	if err := validBranchName(n.Branch); err != nil {
+		return fmt.Errorf("invalid branch: %w", err)
+	}
+	if err := validBranchName(n.TargetBranch); err != nil {
+		return fmt.Errorf("invalid target branch: %w", err)
+	}
+	return nil
+}
+
+// Env returns the branch-related environment entries for the Percy process.
+func (o Options) Env() []string {
+	n := o.Normalize()
+	branch := n.Branch
+	if branch == "" {
+		branch = DefaultBranch
+	}
+	env := []string{"PERCY_BRANCH=" + branch}
+	if n.TargetBranch != "" {
+		env = append(env, "PERCY_TARGET_BRANCH="+n.TargetBranch)
+	}
+	return env
+}
+
 type Controller struct {
 	binary    *Binary
 	installer *Installer
@@ -54,7 +113,7 @@ func (c *Controller) emitLog(line string) {
 	}
 }
 
-func (c *Controller) Start(token string) error {
+func (c *Controller) Start(token string, opts Options) error {
 	log.Println("[percy] Start() called")
 	log.Printf("[percy] executable: %s", c.binary.Path)
 
@@ -65,11 +124,9 @@ func (c *Controller) Start(token string) error {
 	// Path is derived from the server's own executable location (see NewBinary), never from user input.
 	// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command
 	cmd := exec.Command(c.binary.Path, "exec:start")
-	cmd.Env = append(
-		os.Environ(),
-		"PERCY_TOKEN="+token,
-		"PERCY_BRANCH=percy-local-manager",
-	)
+	cmd.Env = append(os.Environ(), "PERCY_TOKEN="+token)
+	cmd.Env = append(cmd.Env, opts.Env()...)
+	log.Printf("[percy] branch settings: %v", opts.Env())
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {

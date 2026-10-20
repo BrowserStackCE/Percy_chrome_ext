@@ -9,6 +9,7 @@ import (
 
 	"github.com/jostan30/Percy_chrome_ext/go-backend/internal/app"
 	"github.com/jostan30/Percy_chrome_ext/go-backend/internal/httpx"
+	"github.com/jostan30/Percy_chrome_ext/go-backend/internal/percy"
 	"github.com/jostan30/Percy_chrome_ext/go-backend/internal/service"
 )
 
@@ -18,6 +19,10 @@ type BuildHandler struct {
 
 type FinalizeRequest struct {
 	Token string `json:"token"`
+	// Branch and TargetBranch are optional PERCY_BRANCH / PERCY_TARGET_BRANCH
+	// overrides. Empty means the defaults.
+	Branch       string `json:"branch,omitempty"`
+	TargetBranch string `json:"targetBranch,omitempty"`
 }
 
 func NewBuildHandler(app *app.App) *BuildHandler {
@@ -36,10 +41,13 @@ func (h *BuildHandler) Finalize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.app.BuildService.StartFinalize(req.Token); err != nil {
+	opts := percy.Options{Branch: req.Branch, TargetBranch: req.TargetBranch}
+	if err := h.app.BuildService.StartFinalize(req.Token, opts); err != nil {
 		code := http.StatusInternalServerError
 		if errors.Is(err, service.ErrBuildRunning) {
 			code = http.StatusConflict
+		} else if errors.Is(err, service.ErrInvalidOptions) {
+			code = http.StatusBadRequest
 		}
 		httpx.WriteJSON(w, code, map[string]string{
 			"error": err.Error(),

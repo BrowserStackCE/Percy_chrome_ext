@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom';
 import { useFinalizeBuild } from '../hooks/useFinalizeBuild';
 import { BuildProgress } from './BuildProgress';
+import { BranchSettingsFields } from './BranchSettingsFields';
 
 interface FinalizeBuildPanelProps {
   token: string;
@@ -34,6 +35,7 @@ export function FinalizeBuildPanel({
 
   return (
     <div className="finalize-build">
+      <BranchSettingsFields disabled={isRunning} />
       <div className="finalize-build__actions">
         <button
           className="button button--primary"

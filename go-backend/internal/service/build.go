@@ -12,6 +12,9 @@ import (
 // ErrBuildRunning is returned when a build is already in progress.
 var ErrBuildRunning = errors.New("a build is already running")
 
+// ErrInvalidOptions wraps a rejected branch / target branch value.
+var ErrInvalidOptions = errors.New("invalid branch settings")
+
 type BuildService struct {
 	percy    *percy.Controller
 	client   *percy.Client
@@ -52,7 +55,11 @@ func (s *BuildService) Subscribe() subscriber { return s.job.Subscribe() }
 func (s *BuildService) Unsubscribe(ch subscriber) { s.job.Unsubscribe(ch) }
 
 // StartFinalize validates, then runs the build in the background.
-func (s *BuildService) StartFinalize(token string) error {
+func (s *BuildService) StartFinalize(token string, opts percy.Options) error {
+	if err := opts.Validate(); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidOptions, err)
+	}
+	opts = opts.Normalize()
 	if s.externalBusy != nil && s.externalBusy() {
 		return ErrBuildRunning
 	}
@@ -70,7 +77,7 @@ func (s *BuildService) StartFinalize(token string) error {
 	}
 
 	go func() {
-		if err := s.run(token); err != nil {
+		if err := s.run(token, opts); err != nil {
 			log.Printf("[build] failed: %v", err)
 			s.job.AddLog("Build failed: " + err.Error())
 			s.job.Fail(err)
@@ -79,7 +86,7 @@ func (s *BuildService) StartFinalize(token string) error {
 	return nil
 }
 
-func (s *BuildService) run(token string) error {
+func (s *BuildService) run(token string, opts percy.Options) error {
 	snapshots := s.snapshot.List()
 
 	s.job.SetPhase(PhaseInstalling)
@@ -89,7 +96,7 @@ func (s *BuildService) run(token string) error {
 	log.Println("[build] Percy runtime ready")
 
 	s.job.SetPhase(PhaseStarting)
-	if err := s.percy.Start(token); err != nil {
+	if err := s.percy.Start(token, opts); err != nil {
 		return err
 	}
 

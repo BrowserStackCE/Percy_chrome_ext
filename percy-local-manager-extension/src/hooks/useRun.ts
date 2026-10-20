@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { cancelBuild, getBuild, startRun } from '../services/workflowApi';
+import { getStoredBranchSettings } from '../utils/branchStorage';
 import { isTerminal, type WorkflowBuild } from '../types/build';
 
 const ACTIVE_KEY = 'activeBuildId';
@@ -69,7 +70,14 @@ export function useRun(token: string, onFinished?: () => void) {
       setError(null);
       setStarting(true);
       try {
-        const res = await startRun(workflowId, token, newKey(), secrets);
+        // Read at trigger time so the run always uses what is saved.
+        const res = await startRun(
+          workflowId,
+          token,
+          newKey(),
+          secrets,
+          await getStoredBranchSettings(),
+        );
         await chrome.storage.session.set({ [ACTIVE_KEY]: res.buildId });
         follow(res.buildId);
       } catch (e) {

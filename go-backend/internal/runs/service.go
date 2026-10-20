@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jostan30/Percy_chrome_ext/go-backend/internal/percy"
 	"github.com/jostan30/Percy_chrome_ext/go-backend/internal/workflow"
 )
 
@@ -22,12 +23,14 @@ var (
 	ErrBusy         = errors.New("a workflow run is already in progress (a cancelled or finished run may still be shutting down Percy; retry in a few seconds)")
 	ErrNoToken      = errors.New("a Percy token is required to create a build")
 	ErrNotCancelled = errors.New("build is not running")
+	// ErrInvalidOptions wraps a rejected branch / target branch value.
+	ErrInvalidOptions = errors.New("invalid branch settings")
 )
 
 // Percy is the slice of the existing Percy controller/client a run needs.
 type Percy interface {
 	EnsureReady() error
-	Start(token string) error
+	Start(token string, opts percy.Options) error
 	Stop() error
 	BuildInfo() (id, url string, err error)
 	WaitIdle(timeout time.Duration) error
@@ -112,6 +115,15 @@ func (s *Service) Wait() { s.wg.Wait() }
 // Start validates, persists a queued build, then runs it in the background.
 // A repeated idempotency key returns the existing build instead of a new one.
 func (s *Service) Start(workflowID, token, idemKey string, secrets map[string]string) (*Build, bool, error) {
+	return s.StartWithOptions(workflowID, token, idemKey, secrets, percy.Options{})
+}
+
+// StartWithOptions is Start with per-run Percy branch settings (empty = defaults).
+func (s *Service) StartWithOptions(workflowID, token, idemKey string, secrets map[string]string, opts percy.Options) (*Build, bool, error) {
+	if err := opts.Validate(); err != nil {
+		return nil, false, fmt.Errorf("%w: %v", ErrInvalidOptions, err)
+	}
+	opts = opts.Normalize()
 	wf, err := s.cfg.Workflows.Get(workflowID)
 	if err != nil {
 		return nil, false, err
@@ -163,7 +175,7 @@ func (s *Service) Start(workflowID, token, idemKey string, secrets map[string]st
 	go func() {
 		defer s.wg.Done()
 		defer cancel()
-		s.execute(ctx, b.BuildID, wf, token, secrets)
+		s.execute(ctx, b.BuildID, wf, token, secrets, opts)
 		s.mu.Lock()
 		s.active = ""
 		delete(s.cancels, b.BuildID)
@@ -204,7 +216,7 @@ func (s *Service) fail(buildID, msg string) {
 	}
 }
 
-func (s *Service) execute(ctx context.Context, buildID string, wf *workflow.Workflow, token string, secrets map[string]string) {
+func (s *Service) execute(ctx context.Context, buildID string, wf *workflow.Workflow, token string, secrets map[string]string, opts percy.Options) {
 	// Safety net: whatever happens (panic included) the build leaves "running".
 	defer func() {
 		if r := recover(); r != nil {
@@ -237,7 +249,7 @@ func (s *Service) execute(ctx context.Context, buildID string, wf *workflow.Work
 		s.fail(buildID, err.Error())
 		return
 	}
-	if err := s.cfg.Percy.Start(token); err != nil {
+	if err := s.cfg.Percy.Start(token, opts); err != nil {
 		s.fail(buildID, err.Error())
 		return
 	}
