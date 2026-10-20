@@ -10,7 +10,11 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        popup: 'index.html'
+        popup: 'index.html',
+        library: 'library.html',
+        snapshots: 'snapshots.html',
+        // Service worker (ES module worker, may share chunks with the popup).
+        background: 'src/background/recorder.ts'
       },
       output: {
         entryFileNames: '[name].js',
