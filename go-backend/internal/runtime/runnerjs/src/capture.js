@@ -26,9 +26,54 @@ export async function serializeDom(page, secrets) {
   return redactSecrets(html, secrets);
 }
 
+// Describes the live form controls (never their values) for the run log, so a
+// "form is empty" report can be told apart from "never filled".
+export async function describeFormState(page) {
+  return page.evaluate(() => {
+    const out = [];
+    document.querySelectorAll('input, textarea, select').forEach((el) => {
+      const tag = el.tagName.toLowerCase();
+      const type = (el.getAttribute('type') || (tag === 'input' ? 'text' : tag)).toLowerCase();
+      const id = el.id || el.getAttribute('name') || '(no id)';
+      if (type === 'checkbox' || type === 'radio') out.push(`${id}[${type}] checked=${el.checked}`);
+      else if (tag === 'select') out.push(`${id}[select] selectedIndex=${el.selectedIndex}`);
+      else out.push(`${id}[${type}] filled=${el.value !== ''} length=${el.value.length}`);
+    });
+    return out;
+  });
+}
+
 async function serializeRaw(page) {
   return page.evaluate(() => {
     const clone = document.documentElement.cloneNode(true);
+
+    // Playwright fill/check/select change live properties, which outerHTML does
+    // not serialize. Mirror the live state onto the clone (matched by index)
+    // so the snapshot shows what the workflow entered.
+    const liveInputs = document.documentElement.querySelectorAll('input');
+    clone.querySelectorAll('input').forEach((el, i) => {
+      const live = liveInputs[i];
+      if (!live) return;
+      const t = (live.getAttribute('type') || 'text').toLowerCase();
+      if (t === 'checkbox' || t === 'radio') {
+        if (live.checked) el.setAttribute('checked', '');
+        else el.removeAttribute('checked');
+      } else if (!['button', 'submit', 'reset', 'file', 'image', 'hidden'].includes(t)) {
+        el.setAttribute('value', live.value);
+      }
+    });
+    const liveAreas = document.documentElement.querySelectorAll('textarea');
+    clone.querySelectorAll('textarea').forEach((el, i) => {
+      if (liveAreas[i]) el.textContent = liveAreas[i].value;
+    });
+    const liveOptions = document.documentElement.querySelectorAll('option');
+    clone.querySelectorAll('option').forEach((el, i) => {
+      if (!liveOptions[i]) return;
+      if (liveOptions[i].selected) el.setAttribute('selected', '');
+      else el.removeAttribute('selected');
+    });
+
+    // Sensitive values are stripped AFTER the mirror so they stay blank.
     clone
       .querySelectorAll('input[type="password"], input[autocomplete*="password"], input[autocomplete*="cc-"]')
       .forEach((el) => {

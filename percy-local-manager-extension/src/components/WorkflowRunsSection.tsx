@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { listBuilds, updateWorkflow } from '../services/workflowApi';
+import { getBuildLog, listBuilds, updateWorkflow } from '../services/workflowApi';
 import { RecordedSteps } from './RecordedSteps';
 import { BranchSettingsFields } from './BranchSettingsFields';
 import { renumber } from '../utils/recorderCore';
@@ -57,6 +57,35 @@ export function WorkflowRunsSection({ token, hasToken, busy }: WorkflowRunsSecti
   // Secrets live only in this component's state for the run: never persisted.
   const [secrets, setSecrets] = useState<Record<string, string>>({});
   const [builds, setBuilds] = useState<WorkflowBuild[]>([]);
+  // Run log viewer: shown for the live build and for any build in the history table.
+  const [logBuildId, setLogBuildId] = useState<string | null>(null);
+  const [logText, setLogText] = useState('');
+  const [logError, setLogError] = useState<string | null>(null);
+
+  const liveBuildId = run.build?.buildId;
+  const liveDone = run.build ? isTerminal(run.build.status) : false;
+  useEffect(() => {
+    if (!logBuildId) return;
+    let cancelled = false;
+    let timer: number | undefined;
+    const load = async () => {
+      try {
+        const text = await getBuildLog(logBuildId);
+        if (cancelled) return;
+        setLogText(text);
+        setLogError(null);
+      } catch (e) {
+        if (!cancelled) setLogError(e instanceof Error ? e.message : String(e));
+      }
+      // Keep refreshing while the viewed build is still running.
+      if (!cancelled && logBuildId === liveBuildId && !liveDone) timer = window.setTimeout(load, 1500);
+    };
+    void load();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [logBuildId, liveBuildId, liveDone]);
 
   useEffect(() => {
     let cancelled = false;
@@ -324,6 +353,13 @@ export function WorkflowRunsSection({ token, hasToken, busy }: WorkflowRunsSecti
                 Open Percy build →
               </a>
             )}
+            <button
+              type="button"
+              className="button button--secondary"
+              onClick={() => setLogBuildId(logBuildId === build.buildId ? null : build.buildId)}
+            >
+              {logBuildId === build.buildId ? 'Hide logs' : 'View logs'}
+            </button>
             {!done ? (
               <button type="button" className="button button--danger" onClick={run.cancel}>
                 Cancel run
@@ -337,6 +373,21 @@ export function WorkflowRunsSection({ token, hasToken, busy }: WorkflowRunsSecti
         </div>
       )}
 
+      {logBuildId && (
+        <div className="workflow-runs__card">
+          <div className="workflow-runs__actions">
+            <strong>Run logs · {logBuildId}</strong>
+            <button type="button" className="button button--secondary" onClick={() => setLogBuildId(null)}>
+              Close logs
+            </button>
+          </div>
+          {logError && <p className="message message--error">{logError}</p>}
+          <pre className="workflow-log" aria-label="Run logs">
+            {logText || 'No log output yet.'}
+          </pre>
+        </div>
+      )}
+
       {builds.length > 0 && (
         <div className="table-wrap">
           <table className="snapshot-table">
@@ -347,6 +398,7 @@ export function WorkflowRunsSection({ token, hasToken, busy }: WorkflowRunsSecti
                 <th>Status</th>
                 <th>Started</th>
                 <th>Percy</th>
+                <th>Logs</th>
               </tr>
             </thead>
             <tbody>
@@ -364,6 +416,11 @@ export function WorkflowRunsSection({ token, hasToken, busy }: WorkflowRunsSecti
                     ) : (
                       '—'
                     )}
+                  </td>
+                  <td>
+                    <button type="button" className="button button--link" onClick={() => setLogBuildId(b.buildId)}>
+                      Logs
+                    </button>
                   </td>
                 </tr>
               ))}

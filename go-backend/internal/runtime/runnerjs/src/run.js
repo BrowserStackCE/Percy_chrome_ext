@@ -1,8 +1,8 @@
 import { chromium } from 'playwright';
 import { emit } from './events.js';
-import { serializeDom, saveCheckpoint, saveFailureDom } from './capture.js';
+import { serializeDom, saveCheckpoint, saveFailureDom, describeFormState } from './capture.js';
 import { postSnapshot } from './percy.js';
-import { executors, navigate } from './steps.js';
+import { executors, navigate, stepLabel } from './steps.js';
 
 // Exit codes (read by the Go backend): 0 passed, 1 failed, 2 partial, 3 invalid input.
 export const EXIT = { PASSED: 0, FAILED: 1, PARTIAL: 2, INVALID: 3 };
@@ -28,6 +28,12 @@ async function doSnapshot(page, step, req, state) {
   // Intentional wait so late content settles before the DOM is captured.
   if (step.waitMs > 0) await page.waitForTimeout(step.waitMs);
   const dom = await serializeDom(page, req.secrets);
+  // Value-free summary of the form at capture time, for the run log.
+  const form = await describeFormState(page).catch(() => []);
+  emit({
+    type: 'log',
+    message: `snapshot "${step.name}" at ${page.url()}: ${form.length} form control(s)${form.length ? ' - ' + form.join('; ') : ''}`,
+  });
   const paths = await saveCheckpoint(
     page,
     {
@@ -94,6 +100,7 @@ export async function runWorkflow(req) {
     const ctx = { settings, secrets };
     for (const step of workflow.steps) {
       emit({ type: 'stepStarted', stepId: step.id });
+      emit({ type: 'log', message: `step ${step.id}: ${stepLabel(step)}` });
       const t0 = Date.now();
       try {
         if (step.type === 'snapshot') {

@@ -148,6 +148,56 @@ test('password input value is redacted from the saved DOM artifact', async () =>
   assert.doesNotMatch(JSON.stringify(percy.received), /hunter2-SECRET/);
 });
 
+test('run emits value-free log events for each step and the form state at snapshot', async () => {
+  const percy = await percyStub();
+  const artifactDir = await mkdtemp(path.join(tmpdir(), 'wf-'));
+  const { events } = await capture(() =>
+    runWorkflow({
+      buildId: 'build_t', artifactDir, percyUrl: percy.url, secrets: { pw: 'hunter2-SECRET' },
+      workflow: wf([
+        { id: 'step_001', type: 'fill', target: { css: '#user' }, value: 'alice' },
+        { id: 'step_002', type: 'fill', target: { css: '#pw' }, valueRef: 'pw' },
+        { id: 'step_003', type: 'snapshot', checkpointId: 'logged', name: 'Logged' },
+      ]),
+    }),
+  );
+  percy.close();
+  const logs = events.filter((e) => e.type === 'log').map((e) => e.message);
+  assert.ok(logs.some((m) => /step step_001: fill/.test(m)));
+  const snap = logs.find((m) => /snapshot "Logged"/.test(m));
+  assert.match(snap, /user\[text\] filled=true length=5/);
+  assert.match(snap, /pw\[password\] filled=true length=14/);
+  // values themselves never reach the log
+  assert.doesNotMatch(JSON.stringify(events), /alice|hunter2-SECRET/);
+});
+
+test('snapshot DOM carries filled, selected and checked form state (not just attributes)', async () => {
+  const percy = await percyStub();
+  const artifactDir = await mkdtemp(path.join(tmpdir(), 'wf-'));
+  await capture(() =>
+    runWorkflow({
+      buildId: 'build_t', artifactDir, percyUrl: percy.url, secrets: { pw: 'hunter2-SECRET' },
+      workflow: wf([
+        { id: 'step_001', type: 'fill', target: { css: '#user' }, value: 'alice' },
+        { id: 'step_002', type: 'fill', target: { css: '#pw' }, valueRef: 'pw' },
+        { id: 'step_003', type: 'select', target: { css: '#plan' }, value: 'pro' },
+        { id: 'step_004', type: 'check', target: { css: '#agree' } },
+        { id: 'step_005', type: 'snapshot', checkpointId: 'form', name: 'Form' },
+      ]),
+    }),
+  );
+  percy.close();
+  const saved = await readFile(path.join(artifactDir, 'dom', 'form.html'), 'utf8');
+  assert.match(saved, /<input id="user" type="text" value="alice"/);
+  assert.match(saved, /<input id="agree" type="checkbox" checked=""/);
+  assert.match(saved, /<option value="pro" selected="">/);
+  assert.doesNotMatch(saved, /<option value="free" selected/);
+  // sensitive fields stay blank
+  assert.doesNotMatch(saved, /hunter2-SECRET/);
+  assert.doesNotMatch(saved, /<input id="pw" type="password" value=/);
+  assert.match(JSON.stringify(percy.received), /value=\\"alice\\"/);
+});
+
 test('ambiguous locator fails safely at that step and keeps a debug DOM', async () => {
   const artifactDir = await mkdtemp(path.join(tmpdir(), 'wf-'));
   const { result, events } = await capture(() =>

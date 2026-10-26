@@ -968,6 +968,21 @@ body {
   gap: 12px;
 }
 
+.workflow-log {
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--ink-100);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+}
+
 .build-snapshot--pending .build-snapshot__badge {
   background: var(--ink-100);
 }

@@ -65,8 +65,13 @@ func (p *pump) onLine(line string) {
 		p.logf("[runner] " + line)
 		return
 	}
-	// Never log full event payloads: they may echo user data.
-	p.logf("[event] " + e.Type + " " + e.StepID + e.CheckpointID)
+	// Never log full event payloads: they may echo user data. "log" events are
+	// runner-authored diagnostics (no form values), so their message is kept.
+	if e.Type == "log" {
+		p.logf("[runner] " + e.Message)
+		return
+	}
+	p.logf("[event] " + e.Type + " " + e.StepID + e.CheckpointID + " " + e.Status + " " + e.Message)
 
 	_, _ = p.store.Update(p.buildID, func(b *Build) {
 		switch e.Type {

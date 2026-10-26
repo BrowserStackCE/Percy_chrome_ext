@@ -81,6 +81,14 @@ export async function listBuilds(): Promise<WorkflowBuild[]> {
   return Array.isArray(data) ? data : [];
 }
 
+/** Plain-text run log (runner steps, form state at each snapshot, errors). */
+export async function getBuildLog(buildId: string): Promise<string> {
+  const res = await fetch(`${ENDPOINTS.BUILDS}/${encodeURIComponent(buildId)}/artifacts/logs/runner.log`);
+  if (res.status === 404) return '';
+  if (!res.ok) throw new Error(`Could not load logs (${res.status})`);
+  return res.text();
+}
+
 export async function cancelBuild(buildId: string): Promise<void> {
   await parse<unknown>(
     await fetch(`${ENDPOINTS.BUILDS}/${encodeURIComponent(buildId)}/cancel`, { method: 'POST' }),
