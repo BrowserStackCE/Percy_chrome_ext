@@ -4,35 +4,23 @@ import { useSnapshotQueue } from '../hooks/useSnapshotQueue';
 import { ConnectionStatus } from '../components/ConnectionStatus';
 import { QueueCount } from '../components/QueueCount';
 import { CaptureSnapshotPanel } from '../components/CaptureSnapshotPanel';
-import { LibraryTokenPanel } from '../components/LibraryTokenPanel';
-import { LibraryMatches } from '../components/LibraryMatches';
+import { useToken } from '../hooks/useToken';
+import { useTokenPrompt } from '../hooks/useTokenPrompt';
+import { TokenSettingsPanel } from '../components/TokenSettingsPanel';
 import { BrandMark } from '../components/BrandMark';
-import { useLibrarySearch } from '../hooks/useLibrarySearch';
-import type { LibrarySnapshotReference } from '../types';
+import { RecordLauncher } from '../components/RecordLauncher';
 
 export function Popup() {
   const connectionStatus = useConnectionStatus();
   const queue = useSnapshotQueue();
 
-  const [libraryQuery, setLibraryQuery] = useState('');
-
-  const { results, isSearching } = useLibrarySearch(libraryQuery);
-
   const isBackendOffline = connectionStatus === 'offline';
+  const { hasToken, isLoading: isTokenLoading } = useToken();
+  const [showSettings, setShowSettings] = useState(false);
+  const shouldPromptForToken = useTokenPrompt(hasToken, isTokenLoading);
+  const needsToken = !isTokenLoading && !hasToken;
 
-  function openLibrary(ref?: LibrarySnapshotReference) {
-    const url = new URL(
-      chrome.runtime.getURL('library.html')
-    );
-
-    if (ref?.name) {
-      url.searchParams.set('search', ref.name);
-    }
-
-    chrome.tabs.create({
-      url: url.toString(),
-    });
-  }
+ 
 
   return (
     <main className="popup">
@@ -48,7 +36,36 @@ export function Popup() {
           </div>
         </div>
 
-        <ConnectionStatus status={connectionStatus} />
+        <div className="popup__header-actions">
+          <ConnectionStatus status={connectionStatus} />
+
+          <div className="tooltip-anchor">
+            <button
+              type="button"
+              className={`icon-button${
+                needsToken ? ' icon-button--attention' : ''
+              }${shouldPromptForToken ? ' icon-button--pulse' : ''}`}
+              aria-label={
+                needsToken ? 'Set project token' : 'Token settings'
+              }
+              aria-describedby={needsToken ? 'token-tooltip' : undefined}
+              aria-expanded={showSettings}
+              onClick={() => setShowSettings((open) => !open)}
+            >
+              ⚙
+            </button>
+
+            {needsToken && (
+              <span
+                id="token-tooltip"
+                className="tooltip-bubble"
+                role="tooltip"
+              >
+                Set project token
+              </span>
+            )}
+          </div>
+        </div>
       </header>
 
       <div
@@ -56,52 +73,37 @@ export function Popup() {
         aria-hidden="true"
       />
 
+      {showSettings ? (
+        <div className="popup__body">
+          <TokenSettingsPanel
+            hasToken={hasToken}
+            onClose={() => setShowSettings(false)}
+          />
+        </div>
+      ) : (
       <div className="popup__body">
+        {isBackendOffline && (
+          <div className="offline-notice" role="alert">
+            <strong>Backend server is offline.</strong>
+            <span>
+              Start the backend server (run the <code>server</code> script
+              from the Percy distributable for your OS), then reopen this
+              popup or wait for it to reconnect.
+            </span>
+          </div>
+        )}
+
         <QueueCount
           count={queue.count}
           isLoading={queue.isLoading}
         />
 
-        <LibraryTokenPanel />
-
-        {/* Library search */}
-        <div className="panel library-search-panel">
-          <span className="panel__eyebrow">
-            Snapshot Library
-          </span>
-
-          <input
-            className="text-input"
-            type="text"
-            placeholder="Search snapshots..."
-            value={libraryQuery}
-            onChange={(event) =>
-              setLibraryQuery(event.target.value)
-            }
-            disabled={isBackendOffline}
-          />
-
-          {libraryQuery.trim() !== '' && (
-            <LibraryMatches
-              results={results}
-              isSearching={isSearching}
-            />
-          )}
-
-          <button
-            type="button"
-            className="button button--link"
-            onClick={() => openLibrary()}
-            disabled={isBackendOffline}
-          >
-            Browse full library →
-          </button>
-        </div>
-
         <CaptureSnapshotPanel
           disabled={isBackendOffline}
           onCaptured={queue.refresh}
         />
+
+        <RecordLauncher disabled={isBackendOffline} />
 
         <button
           className="button button--secondary button--block"
@@ -115,6 +117,7 @@ export function Popup() {
           View Snapshots
         </button>
       </div>
+      )}
     </main>
   );
 }
