@@ -1,5 +1,6 @@
 export type StepType =
   | 'click'
+  | 'hover'
   | 'fill'
   | 'select'
   | 'check'
@@ -15,6 +16,8 @@ export interface Target {
   name?: string;
   css?: string;
   text?: string;
+  /** Repeated element: pick the one inside the item that contains this exact text. */
+  within?: string;
   fallbacks?: Target[];
 }
 
@@ -43,6 +46,11 @@ export interface WorkflowStep {
   name?: string;
   scrollX?: number;
   scrollY?: number;
+  /**
+   * Interaction steps only: when the target never appears (cookie banners,
+   * newsletter pop-ups) the step is skipped with a warning instead of failing.
+   */
+  optional?: boolean;
   /** Snapshot only: intentional wait (ms) before capturing. */
   waitMs?: number;
   /** Snapshot only: per-snapshot Percy options. */
@@ -51,6 +59,12 @@ export interface WorkflowStep {
 
 export interface WorkflowSettings {
   defaultTimeoutMs?: number;
+  /** Replay: dismiss known cookie-consent banners after each navigation. */
+  autoConsent?: boolean;
+  /** Replay: stop carousels/animations and load lazy content before snapshots. */
+  stabilize?: boolean;
+  /** Page type detected while recording ('spa' | 'cms' | 'static'); informational. */
+  pageKind?: string;
   viewport: { width: number; height: number };
 }
 
@@ -74,6 +88,8 @@ export interface RecordingState {
   tabId?: number;
   startUrl?: string;
   viewport?: { width: number; height: number };
+  /** Page type detected on the start page ('spa' | 'cms' | 'static'). */
+  pageKind?: string;
   steps: WorkflowStep[];
 }
 

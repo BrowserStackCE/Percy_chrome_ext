@@ -34,9 +34,26 @@ Percy Local Manager consists of three components that work together:
 1. Start the Go backend server
 2. Open the extension popup and click **Record**
 3. Interact with the page — clicks, form fills, selects, and scrolls are captured automatically
-4. Click **Capture Snapshot** in the floating panel to mark Percy checkpoints
-5. Click **Stop**, review the recorded steps, then **Save** the workflow
+4. Click **Capture Snapshot** in the floating panel to mark Percy checkpoints (optionally set a wait and Percy options — see below)
+5. Click **Stop**, review and edit the recorded steps, then **Save** the workflow
 6. Click **Replay** on any saved workflow — the backend drives Playwright headlessly, takes Percy snapshots at each checkpoint, and finalizes the build
+
+### Snapshot Wait and Options
+
+Each snapshot checkpoint can carry a wait and per-snapshot Percy options. They are only valid on `snapshot` steps and are validated by the backend on save.
+
+| Setting | Field | Limits | What it does |
+|---|---|---|---|
+| Wait | `waitMs` | 0–60000 ms (extension default 4000) | Intentional pause before the snapshot is captured, so client-side pages finish rendering |
+| Widths | `options.widths` | max 10 entries, each 1–4000 | Viewport widths to render |
+| Min height | `options.minHeight` | 0–20000 | Minimum snapshot height |
+| Scope | `options.scope` | CSS selector, max 500 chars | Limit the snapshot to part of the page |
+| Enable JavaScript | `options.enableJavaScript` | boolean | Run JavaScript in Percy's renderer |
+| Percy CSS | `options.percyCSS` | max 10000 chars | CSS injected only when rendering (e.g. hide dynamic content) |
+
+### Editing a Saved Workflow
+
+Recorded steps can be edited before saving, and saved workflows can be updated afterwards (`PUT /api/workflows/{id}`). Use the step edit panel to change a step's locator or value, and the snapshot options fields to change a checkpoint's name, wait, and Percy options.
 
 ### Branch and Target Branch
 
@@ -77,7 +94,7 @@ Percy_chrome_ext/
 │       ├── middleware/          # CORS, logger, recovery, chain
 │       ├── percy/               # Percy CLI binary management + controller
 │       ├── runs/                # Workflow run lifecycle (service, store, pump, adapters)
-│       ├── runtime/             # Playwright installer + embedded runner JS
+│       ├── runtime/             # Playwright installer + embedded runner JS (runnerjs/src: locate, steps, percy, run)
 │       ├── service/             # Build and snapshot business logic
 │       ├── snapshot/            # In-memory snapshot store
 │       └── workflow/            # Workflow model, JSON store, validator
@@ -88,10 +105,11 @@ Percy_chrome_ext/
 │   │   ├── content/             # Injected page scripts — event capture (recorder.ts) + floating widget
 │   │   ├── popup/               # Extension popup UI
 │   │   ├── components/          # React UI components (WorkflowPanel, RecordedSteps, RunProgress…)
-│   │   ├── hooks/               # useRecorder, useWorkflows, useRun, finalize, capture hooks
+│   │   ├── hooks/               # useRecorder, useWorkflows, useRun, useBranchSettings, finalize, capture hooks
 │   │   ├── services/            # DOM capture + backend API client + workflowApi
 │   │   ├── types/               # Shared TypeScript types (workflow.ts, build.ts)
-│   │   └── utils/               # Constants, recorderCore (pure locator helpers)
+│   │   └── utils/               # Constants, branchStorage, recorderCore (pure locator helpers)
+│   ├── tests/                   # Node unit tests (branchStorage, recorderCore)
 │   ├── public/manifest.json     # Chrome Manifest V3
 │   └── package.json
 │
@@ -191,7 +209,7 @@ Then load the generated `dist/` folder as an unpacked extension.
 
 ## Go Backend — Build from Source
 
-**Prerequisites:** Go 1.21+
+**Prerequisites:** Go 1.23+
 
 ```bash
 cd go-backend
@@ -229,25 +247,28 @@ Base URL: `http://localhost:4321`
 | Method | Endpoint | Description |
 |---|---|---|
 | `POST` | `/build/finalize` | Upload all queued snapshots to Percy — body `{ token, branch?, targetBranch? }` (both optional; empty = defaults) |
-| `GET` | `/build/finalize/stream` | SSE stream of build progress — events: `progress`, `done`, `error` |
+| `GET` | `/build/status` | Current build status and progress |
+| `GET` | `/build/stream` | SSE stream of build logs/progress, used by the extension UI |
 
 ### Workflows
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/workflows` | Save a recorded workflow — `{ name, startUrl, steps, settings }` |
-| `GET` | `/workflows` | List all saved workflows |
-| `GET` | `/workflows/:id` | Get a single workflow |
-| `DELETE` | `/workflows/:id` | Delete a workflow |
+| `POST` | `/api/workflows` | Save a recorded workflow — `{ name, startUrl, steps, settings }`; snapshot steps may include `waitMs` and `options` |
+| `GET` | `/api/workflows` | List all saved workflows |
+| `GET` | `/api/workflows/{id}` | Get a single workflow |
+| `PUT` | `/api/workflows/{id}` | Update (edit) a saved workflow |
 
-### Runs (Workflow Replay)
+### Runs / Builds (Workflow Replay)
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/api/workflows/{id}/runs` | Start a workflow replay — body `{ token, secrets?, branch?, targetBranch? }` (branch fields optional; empty = defaults) |
-| `GET` | `/runs/:id` | Get run status and progress |
-| `GET` | `/runs/:id/stream` | SSE stream of run log lines |
-| `DELETE` | `/runs/:id` | Cancel a running workflow |
+| `POST` | `/api/workflows/{id}/runs` | Start a workflow replay — body `{ token, secrets?, branch?, targetBranch? }`, optional `Idempotency-Key` header. Returns `202` with `{ buildId, status, duplicate }` (`200` on an idempotent retry, `409` if a run is already active) |
+| `GET` | `/api/builds` | List builds |
+| `GET` | `/api/builds/{id}` | Get build status and progress |
+| `GET` | `/api/builds/{id}/artifacts` | List run artifacts (`dom`, `metadata`, `logs`) |
+| `GET` | `/api/builds/{id}/artifacts/{kind}/{name}` | Download a single artifact as plain text |
+| `POST` | `/api/builds/{id}/cancel` | Cancel a running workflow |
 
 ### Library
 
@@ -302,19 +323,19 @@ The recorder captures a multi-step user journey in the browser and replays it he
 1. **User clicks Record** in the popup → popup sends `rec:start` to the background service worker.
 2. **Background worker** (`src/background/recorder.ts`) queries the active tab, injects `content.js` if needed, measures the viewport, and persists `RecordingState` to `chrome.storage.session` (survives popup close).
 3. **Content script** (`src/content/recorder.ts`) attaches `click`, `change`, `input`, and `scroll` listeners. Each event is converted to a typed `WorkflowStep` and forwarded to the background via `rec:event`.
-4. **Locator strategy** (`src/utils/recorderCore.ts`): prefers `data-testid` → `role+name` → stable CSS (`id`/`name` attribute) → visible text → structural path. Framework-generated IDs (React, Radix, MUI…) are filtered out. Sensitive fields store a `valueRef` instead of the literal value.
+4. **Locator strategy** (`src/utils/recorderCore.ts`): prefers `data-testid` → `role+name` → stable CSS (`id`/`name` attribute) → visible text → structural path. Framework-generated IDs (React, Radix, MUI…) are filtered out. Each target keeps the best locator plus ordered `fallbacks`, so replay survives a single locator going stale. Sensitive fields store a `valueRef` instead of the literal value.
 5. **Deduplication**: consecutive fills on the same field collapse to the latest value; consecutive scrolls collapse to the final position.
-6. **Snapshot checkpoints**: clicking **Capture Snapshot** in the floating widget sends `rec:snapshot` → background appends a `snapshot` step with a unique `checkpointId`.
+6. **Snapshot checkpoints**: clicking **Capture Snapshot** in the floating widget sends `rec:snapshot` (with optional `waitMs` and `options`) → background appends a `snapshot` step with a unique `checkpointId`.
 7. **Full-page navigations** are captured via `chrome.webNavigation.onCommitted`.
 8. **Pause/Resume**: pausing stops capture without discarding steps; resuming adds a `navigate` step if the URL changed while paused.
 9. **Save**: background validates (≥1 snapshot, all interactive steps have a locator), calls `POST /workflows`, and clears session state.
 
 ### Replay (Backend)
 
-1. Extension sends `POST /runs` with `{ workflowId, token }`.
+1. Extension sends `POST /api/workflows/{id}/runs` with `{ token, branch?, targetBranch? }`.
 2. **Runs service** (`go-backend/internal/runs/service.go`) starts Percy CLI, then launches the embedded Node runner via Playwright.
-3. **Runner JS** (`go-backend/internal/runtime/runnerjs/src/`) executes each step using Playwright's `page` API and calls `percy.snapshot()` at each `snapshot` step.
-4. **Progress** is streamed to the extension via SSE (`GET /runs/:id/stream`).
+3. **Runner JS** (`go-backend/internal/runtime/runnerjs/src/`) executes each step using Playwright's `page` API and posts the DOM to Percy at each `snapshot` step after waiting `waitMs`, applying the step's `options` (widths, minHeight, scope, enableJavaScript, percyCSS). Element lookup (`locate.js`) tries the primary locator then each fallback, and navigation waits for `load` plus a best-effort `networkidle`.
+4. **Progress** is available via `GET /api/builds/{id}`; artifacts via `/api/builds/{id}/artifacts`.
 5. The build is finalized automatically when all steps complete.
 
 ---

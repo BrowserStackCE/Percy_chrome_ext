@@ -3,6 +3,7 @@ import { emit } from './events.js';
 import { serializeDom, saveCheckpoint, saveFailureDom, describeFormState } from './capture.js';
 import { postSnapshot } from './percy.js';
 import { executors, navigate, stepLabel } from './steps.js';
+import { blockNoise, detectPageProfile, stabilizePage } from './stabilize.js';
 
 // Exit codes (read by the Go backend): 0 passed, 1 failed, 2 partial, 3 invalid input.
 export const EXIT = { PASSED: 0, FAILED: 1, PARTIAL: 2, INVALID: 3 };
@@ -27,6 +28,7 @@ async function doSnapshot(page, step, req, state) {
   const { buildId, artifactDir, percyUrl, workflow } = req;
   // Intentional wait so late content settles before the DOM is captured.
   if (step.waitMs > 0) await page.waitForTimeout(step.waitMs);
+  if (workflow.settings?.stabilize) await stabilizePage(page);
   const dom = await serializeDom(page, req.secrets);
   // Value-free summary of the form at capture time, for the run log.
   const form = await describeFormState(page).catch(() => []);
@@ -86,19 +88,37 @@ export async function runWorkflow(req) {
   const browser = await chromium.launch();
   let failed = false;
   try {
-    const context = await browser.newContext({ viewport });
+    // A normal desktop Chrome identity; headless advertises itself otherwise.
+    const major = browser.version().split('.')[0];
+    const context = await browser.newContext({
+      viewport,
+      locale: 'en-GB',
+      timezoneId: 'Europe/London',
+      userAgent: `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${major}.0.0.0 Safari/537.36`,
+    });
+    await context.addInitScript(() => {
+      Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    });
+    if (settings.stabilize) await blockNoise(context);
     const page = await context.newPage();
     page.setDefaultTimeout(settings.defaultTimeoutMs || 10000);
 
     try {
-      await navigate(page, workflow.startUrl, settings.defaultTimeoutMs);
+      await navigate(page, workflow.startUrl, settings.defaultTimeoutMs, { autoConsent: settings.autoConsent });
     } catch (e) {
       emit({ type: 'error', message: `could not open startUrl: ${e.message}` });
       return EXIT.FAILED;
     }
 
-    const ctx = { settings, secrets };
+    // What kind of page is this? Decides how clicks and waits behave. Detected
+    // again after every navigation (see steps.js), since a flow can cross sites.
+    const ctx = { settings, secrets, profile: await detectPageProfile(page) };
     for (const step of workflow.steps) {
+      // A SPA changes content without navigating: refresh the page type when the URL moved.
+      if (page.url() !== ctx.profileUrl) {
+        ctx.profileUrl = page.url();
+        if (ctx.profileUrl !== workflow.startUrl) ctx.profile = await detectPageProfile(page);
+      }
       emit({ type: 'stepStarted', stepId: step.id });
       emit({ type: 'log', message: `step ${step.id}: ${stepLabel(step)}` });
       const t0 = Date.now();
@@ -110,6 +130,12 @@ export async function runWorkflow(req) {
         }
         emit({ type: 'stepFinished', stepId: step.id, status: 'passed', durationMs: Date.now() - t0 });
       } catch (e) {
+        if (step.optional && step.type !== 'snapshot') {
+          const why = String(e.message || e).split('\n')[0].slice(0, 200);
+          emit({ type: 'log', message: `step ${step.id} skipped (optional): ${why}` });
+          emit({ type: 'stepFinished', stepId: step.id, status: 'passed', durationMs: Date.now() - t0 });
+          continue;
+        }
         failed = true;
         // keep debugging evidence for failed runs
         await saveFailureDom(page, req.artifactDir, step.id, secrets).catch(() => {});

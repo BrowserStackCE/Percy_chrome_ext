@@ -347,3 +347,187 @@ test('legacy snapshot without waitMs/options keeps viewport widths and does not 
   assert.equal(body.scope, undefined);
   assert.equal(body.percyCSS, undefined);
 });
+
+// ---- neilson-like real-world behaviours -------------------------------------
+
+function nwf(steps, settings = {}) {
+  return {
+    version: 1,
+    startUrl: `${fixtures.base}/neilson-like.html`,
+    steps,
+    settings: { defaultTimeoutMs: 3000, viewport: { width: 900, height: 600 }, ...settings },
+  };
+}
+
+test('hover opens a hover-only menu so the item inside can be clicked', async () => {
+  const artifactDir = await mkdtemp(path.join(tmpdir(), 'wf-'));
+  const { result } = await capture(() =>
+    runWorkflow({
+      buildId: 'build_h', artifactDir,
+      workflow: nwf([
+        { id: 'step_001', type: 'click', optional: true, target: { testId: 'actionButton-accept' } },
+        { id: 'step_002', type: 'hover', target: { css: '#beach-toggle' } },
+        { id: 'step_003', type: 'click', target: { css: 'a[href="/beach/croatia/alana-beachclub"]' } },
+        { id: 'step_004', type: 'waitFor', condition: 'visible', target: { text: 'went:/beach/croatia/alana-beachclub' } },
+      ]),
+    }),
+  );
+  assert.equal(result, EXIT.PASSED);
+});
+
+test('without the hover step the hidden menu item cannot be clicked (why hover is recorded)', async () => {
+  const artifactDir = await mkdtemp(path.join(tmpdir(), 'wf-'));
+  const { result } = await capture(() =>
+    runWorkflow({
+      buildId: 'build_h2', artifactDir,
+      workflow: nwf([
+        { id: 'step_001', type: 'click', optional: true, target: { testId: 'actionButton-accept' } },
+        { id: 'step_002', type: 'click', target: { css: 'a[href="/beach/croatia/alana-beachclub"]' }, timeoutMs: 700 },
+      ]),
+    }),
+  );
+  assert.equal(result, EXIT.FAILED);
+});
+
+test('an optional step whose target never appears is skipped, not failed', async () => {
+  const artifactDir = await mkdtemp(path.join(tmpdir(), 'wf-'));
+  const { result, events } = await capture(() =>
+    runWorkflow({
+      buildId: 'build_o2', artifactDir,
+      workflow: nwf([
+        { id: 'step_001', type: 'click', optional: true, target: { css: '#newsletter-close' }, timeoutMs: 500 },
+        { id: 'step_002', type: 'waitFor', condition: 'visible', target: { role: 'heading', name: 'Welcome' } },
+      ]),
+    }),
+  );
+  assert.equal(result, EXIT.PASSED);
+  assert.ok(events.some((e) => e.type === 'log' && /step_001 skipped \(optional\)/.test(e.message)));
+});
+
+test('a non-optional missing step still fails the run', async () => {
+  const artifactDir = await mkdtemp(path.join(tmpdir(), 'wf-'));
+  const { result } = await capture(() =>
+    runWorkflow({
+      buildId: 'build_o3', artifactDir,
+      workflow: nwf([{ id: 'step_001', type: 'click', target: { css: '#newsletter-close' }, timeoutMs: 500 }]),
+    }),
+  );
+  assert.equal(result, EXIT.FAILED);
+});
+
+test('autoConsent dismisses the late cookie banner so later clicks are not blocked', async () => {
+  const artifactDir = await mkdtemp(path.join(tmpdir(), 'wf-'));
+  const { result, events } = await capture(() =>
+    runWorkflow({
+      buildId: 'build_c', artifactDir,
+      workflow: nwf(
+        [
+          { id: 'step_001', type: 'hover', target: { css: '#beach-toggle' } },
+          { id: 'step_002', type: 'click', target: { css: 'a[href="/beach/croatia/alana-beachclub"]' } },
+          { id: 'step_003', type: 'waitFor', condition: 'visible', target: { text: 'went:/beach/croatia/alana-beachclub' } },
+        ],
+        { autoConsent: true },
+      ),
+    }),
+  );
+  assert.equal(result, EXIT.PASSED);
+  assert.ok(events.some((e) => e.type === 'log' && /consent banner dismissed/.test(e.message)));
+});
+
+// ---- shop-like page (React-style numeric ids, sticky header over a side cart) ----
+
+function swf(steps, settings = {}) {
+  return {
+    version: 1,
+    startUrl: `${fixtures.base}/shop-like.html`,
+    steps,
+    settings: { defaultTimeoutMs: 6000, viewport: { width: 1280, height: 800 }, ...settings },
+  };
+}
+
+test('a repeated button is picked by the item label, not by a numeric id or position', async () => {
+  const artifactDir = await mkdtemp(path.join(tmpdir(), 'wf-'));
+  const { result } = await capture(() =>
+    runWorkflow({
+      buildId: 'build_w', artifactDir,
+      workflow: swf([
+        { id: 'step_001', type: 'click', target: { css: 'div.shelf-item__buy-btn', within: 'Galaxy S21' } },
+        { id: 'step_002', type: 'waitFor', condition: 'visible', target: { text: 'cart:Galaxy S21' } },
+      ]),
+    }),
+  );
+  assert.equal(result, EXIT.PASSED);
+});
+
+test('the label is matched exactly: "iPhone 12" does not pick "iPhone 12 Pro Max"', async () => {
+  const artifactDir = await mkdtemp(path.join(tmpdir(), 'wf-'));
+  const { result } = await capture(() =>
+    runWorkflow({
+      buildId: 'build_w2', artifactDir,
+      workflow: swf([
+        { id: 'step_001', type: 'click', target: { css: 'div.shelf-item__buy-btn', within: 'iPhone 12' } },
+        { id: 'step_002', type: 'waitFor', condition: 'visible', target: { text: 'cart:iPhone 12' } },
+      ]),
+    }),
+  );
+  assert.equal(result, EXIT.PASSED);
+});
+
+test('a plain class selector on a 8-card grid is ambiguous and fails safely (why within exists)', async () => {
+  const artifactDir = await mkdtemp(path.join(tmpdir(), 'wf-'));
+  const { result } = await capture(() =>
+    runWorkflow({
+      buildId: 'build_w3', artifactDir,
+      workflow: swf([{ id: 'step_001', type: 'click', target: { css: 'div.shelf-item__buy-btn' }, timeoutMs: 800 }]),
+    }),
+  );
+  assert.equal(result, EXIT.FAILED);
+});
+
+test('a close button partly under the sticky header is clicked on its uncovered part', async () => {
+  const artifactDir = await mkdtemp(path.join(tmpdir(), 'wf-'));
+  const { result, events } = await capture(() =>
+    runWorkflow({
+      buildId: 'build_w4', artifactDir,
+      workflow: swf([
+        { id: 'step_001', type: 'click', target: { css: 'div.shelf-item__buy-btn', within: 'Pixel 4' } },
+        { id: 'step_002', type: 'waitFor', condition: 'visible', target: { css: 'div.float-cart__close-btn' } },
+        { id: 'step_003', type: 'click', target: { css: 'div.float-cart__close-btn' } },
+      ]),
+    }),
+  );
+  assert.equal(result, EXIT.PASSED);
+  assert.ok(events.some((e) => e.type === 'log' && /uncovered part/.test(e.message)));
+  // and the cart really closed
+  const page = events.find((e) => e.type === 'log' && /page type/.test(e.message));
+  assert.match(page.message, /page type: spa/);
+});
+
+test('page type is detected and logged at the start of a run', async () => {
+  const artifactDir = await mkdtemp(path.join(tmpdir(), 'wf-'));
+  const { events } = await capture(() =>
+    runWorkflow({
+      buildId: 'build_w5', artifactDir,
+      workflow: swf([{ id: 'step_001', type: 'waitFor', condition: 'visible', target: { css: 'div.shelf-item__buy-btn', within: 'Pixel 5' } }]),
+    }),
+  );
+  const line = events.find((e) => e.type === 'log' && /page type/.test(e.message));
+  assert.ok(line, 'expected a page type log line');
+  assert.match(line.message, /page type: spa \(.*Next\.js app.*sticky\/fixed top bar/);
+});
+
+test('a click on an ambiguous role+name resolves to the single visible element', async () => {
+  const artifactDir = await mkdtemp(path.join(tmpdir(), 'wf-'));
+  const { result } = await capture(() =>
+    runWorkflow({
+      buildId: 'build_v', artifactDir,
+      workflow: nwf([
+        { id: 'step_001', type: 'click', optional: true, target: { testId: 'actionButton-accept' } },
+        { id: 'step_002', type: 'hover', target: { css: '#beach-toggle' } },
+        { id: 'step_003', type: 'click', target: { role: 'link', name: 'View all Beach Clubs' } },
+        { id: 'step_004', type: 'waitFor', condition: 'visible', target: { text: 'went:/beach/our-resorts' } },
+      ]),
+    }),
+  );
+  assert.equal(result, EXIT.PASSED);
+});

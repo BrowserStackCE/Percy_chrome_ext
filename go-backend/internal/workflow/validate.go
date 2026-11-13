@@ -11,11 +11,11 @@ var (
 	idRe         = regexp.MustCompile(`^[a-z0-9][a-z0-9_]{0,63}$`)
 	checkpointRe = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 	stepTypes    = map[string]bool{
-		"click": true, "fill": true, "select": true, "check": true, "uncheck": true,
+		"click": true, "hover": true, "fill": true, "select": true, "check": true, "uncheck": true,
 		"navigate": true, "waitFor": true, "scroll": true, "snapshot": true,
 	}
 	needsTarget = map[string]bool{
-		"click": true, "fill": true, "select": true, "check": true, "uncheck": true, "waitFor": true,
+		"click": true, "hover": true, "fill": true, "select": true, "check": true, "uncheck": true, "waitFor": true,
 	}
 	conditions = map[string]bool{"": true, "visible": true, "hidden": true, "attached": true, "detached": true}
 )
@@ -112,6 +112,9 @@ func (w *Workflow) validate() error {
 		}
 		if s.ValueRef != "" && !regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,63}$`).MatchString(s.ValueRef) {
 			return fmt.Errorf("%s: invalid valueRef", at)
+		}
+		if s.Optional && (s.Type == "snapshot" || s.Type == "navigate" || s.Type == "scroll") {
+			return fmt.Errorf("%s: optional is only allowed on interaction steps", at)
 		}
 		if s.Type != "snapshot" && (s.WaitMs != 0 || s.Options != nil) {
 			return fmt.Errorf("%s: waitMs and options are only allowed on snapshot steps", at)

@@ -12,6 +12,7 @@ export class LocatorError extends Error {
 
 export function describe(t) {
   if (!t) return '(no target)';
+  if (t.within && t.css) return `css=${t.css} within "${t.within}"`;
   if (t.testId) return `testId=${t.testId}`;
   if (t.role && t.name) return `role=${t.role}[name="${t.name}"]`;
   if (t.css) return `css=${t.css}`;
@@ -19,7 +20,25 @@ export function describe(t) {
   return '(empty target)';
 }
 
+// A repeated element (the same button on every product card) is identified by
+// the item that holds an exact label: the innermost ancestor of that label,
+// then the selector inside it. Checked live on a 25-card product grid: for
+// "iPhone 12", "iPhone 12 Pro" and "Galaxy S20" this gives exactly 1 button,
+// where a substring match found 4 and a plain class selector found 25.
+function withinItem(page, t) {
+  const label = xpathLiteral(t.within);
+  const holder = `//*[.//*[normalize-space(text())=${label}]][not(.//*[.//*[normalize-space(text())=${label}]])]`;
+  return page.locator(`xpath=${holder}`).locator(t.css);
+}
+
+function xpathLiteral(s) {
+  if (!s.includes("'")) return `'${s}'`;
+  if (!s.includes('"')) return `"${s}"`;
+  return `concat('${s.split("'").join(`', "'", '`)}')`;
+}
+
 function build(page, t) {
+  if (t.within && t.css) return withinItem(page, t);
   if (t.testId) return page.getByTestId(t.testId);
   if (t.role && t.name) return page.getByRole(t.role, { name: t.name, exact: true });
   if (t.role) return page.getByRole(t.role);

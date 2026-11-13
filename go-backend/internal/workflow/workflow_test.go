@@ -29,6 +29,32 @@ func TestValidateOK(t *testing.T) {
 	}
 }
 
+func TestValidateAcceptsHoverAndOptional(t *testing.T) {
+	w := valid()
+	w.Settings.AutoConsent = true
+	w.Settings.Stabilize = true
+	w.Steps = append([]Step{
+		{ID: "step_000", Type: "click", Optional: true, Target: &Target{CSS: "button[aria-label=\"Accept all cookies\"]"}},
+		{ID: "step_00a", Type: "hover", Target: &Target{CSS: "a.nav-link"}},
+	}, w.Steps...)
+	if err := w.Validate(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestValidateRejectsOptionalOnNonInteraction(t *testing.T) {
+	w := valid()
+	w.Steps[3].Optional = true
+	if err := w.Validate(); err == nil {
+		t.Fatal("optional snapshot must be rejected")
+	}
+	w = valid()
+	w.Steps = append(w.Steps, Step{ID: "step_009", Type: "hover"})
+	if err := w.Validate(); err == nil {
+		t.Fatal("hover without target must be rejected")
+	}
+}
+
 func TestValidateRejects(t *testing.T) {
 	cases := map[string]func(w *Workflow){
 		"unknown step type": func(w *Workflow) { w.Steps[1].Type = "exec" },

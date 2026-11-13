@@ -12,7 +12,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/jostan30/Percy_chrome_ext/go-backend/internal/percy"
@@ -363,30 +362,16 @@ func (p *execProc) Wait() error {
 }
 
 func (p *execProc) Kill() error {
-	if p.cmd.Process == nil {
-		return nil
-	}
-	// kill the whole group so chromium children die with the runner
-	if err := syscall.Kill(-p.cmd.Process.Pid, syscall.SIGKILL); err != nil {
-		return p.cmd.Process.Kill()
-	}
-	return nil
+	// kill the whole tree so chromium children die with the runner
+	return killProcessTree(p.cmd)
 }
 
 // ExecLauncher runs `node <entry> --request <file>` (no shell, fixed argv).
 func ExecLauncher(ctx context.Context, entry, requestPath, dir string, onLine func(string), onLog func(string)) (Process, error) {
 	cmd := exec.CommandContext(ctx, "node", entry, "--request", requestPath)
 	cmd.Dir = dir
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error {
-		if cmd.Process == nil {
-			return nil
-		}
-		if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err != nil {
-			return cmd.Process.Kill()
-		}
-		return nil
-	}
+	configureProcAttr(cmd)
+	cmd.Cancel = func() error { return killProcessTree(cmd) }
 	cmd.WaitDelay = 5 * time.Second
 
 	stdout, err := cmd.StdoutPipe()

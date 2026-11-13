@@ -21,7 +21,9 @@ export function describeStep(step: WorkflowStep): string {
   const where = describeTarget(step.target);
   switch (step.type) {
     case 'click':
-      return `Click ${where}`;
+      return `${step.optional ? 'Click (if shown) ' : 'Click '}${where}`;
+    case 'hover':
+      return `Hover ${where}`;
     case 'fill':
       return step.valueRef
         ? `Fill ${where} with {${step.valueRef}}`

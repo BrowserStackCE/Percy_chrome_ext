@@ -10,5 +10,6 @@ tests/log/
 
 # Internal developer context docs (not for commit)
 docs/recorder-context.md
+docs/recorder-hardening-notes.md
 
 test-website

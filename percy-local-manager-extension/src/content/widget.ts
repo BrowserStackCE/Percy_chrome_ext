@@ -184,7 +184,8 @@ function describeStep(s: WorkflowStep): string {
   if (s.label) return s.label;
   const w = describeTarget(s.target);
   switch (s.type) {
-    case 'click': return `Click ${w}`;
+    case 'click': return `${s.optional ? 'Click (if shown) ' : 'Click '}${w}`;
+    case 'hover': return `Hover ${w}`;
     case 'fill': return s.valueRef ? `Fill ${w} with {${s.valueRef}}` : `Fill ${w}`;
     case 'select': return `Select "${s.value ?? ''}" in ${w}`;
     case 'check': return `Check ${w}`;
@@ -201,6 +202,37 @@ async function ask<T = unknown>(msg: Record<string, unknown>): Promise<T> {
   const res = (await chrome.runtime.sendMessage(msg)) as T & { error?: string };
   if (res && typeof res === 'object' && 'error' in res && res.error) throw new Error(res.error);
   return res;
+}
+
+/** Keyboard shortcut that takes a snapshot while recording (Ctrl+S, also Cmd+S on macOS). */
+export const SNAPSHOT_SHORTCUT_LABEL = 'Ctrl+S';
+
+/**
+ * Adds a snapshot step using the panel's current name / wait / options. Shared
+ * by the "Capture Snapshot" button and the keyboard shortcut so both behave
+ * identically. Returns false when nothing was captured (not recording, paused,
+ * busy, or the draft is invalid).
+ */
+export function captureSnapshot(): boolean {
+  if (!state.active || state.paused || busy) return false;
+  const parsed = parseSnapDraft(snapDraft);
+  if ('error' in parsed) {
+    message = { kind: 'err', text: parsed.error };
+    render();
+    return false;
+  }
+  void act(async () => {
+    const n = state.steps.filter((s) => s.type === 'snapshot').length + 1;
+    await ask({
+      kind: 'rec:snapshot',
+      name: draftCheckpoint.trim() || `Checkpoint ${n}`,
+      waitMs: parsed.waitMs,
+      options: parsed.options,
+    });
+    draftCheckpoint = '';
+    snapDraft = freshDraft();
+  });
+  return true;
 }
 
 async function act(fn: () => Promise<void>) {
@@ -524,26 +556,8 @@ export function render() {
     // a workflow step (executed on replay) instead of being queued.
     const cp = el('input', { type: 'text', placeholder: 'Defaults to "Checkpoint N"', value: draftCheckpoint });
     cp.addEventListener('input', () => { draftCheckpoint = cp.value; });
-    const snap = el('button', { class: 'cap', textContent: 'Capture Snapshot', disabled: busy });
-    snap.addEventListener('click', () => {
-      const parsed = parseSnapDraft(snapDraft);
-      if ('error' in parsed) {
-        message = { kind: 'err', text: parsed.error };
-        render();
-        return;
-      }
-      void act(async () => {
-        const n = state.steps.filter((s) => s.type === 'snapshot').length + 1;
-        await ask({
-          kind: 'rec:snapshot',
-          name: draftCheckpoint.trim() || `Checkpoint ${n}`,
-          waitMs: parsed.waitMs,
-          options: parsed.options,
-        });
-        draftCheckpoint = '';
-        snapDraft = freshDraft();
-      });
-    });
+    const snap = el('button', { class: 'cap', textContent: 'Capture Snapshot', title: `Capture Snapshot (${SNAPSHOT_SHORTCUT_LABEL})`, disabled: busy });
+    snap.addEventListener('click', () => captureSnapshot());
     const advToggle = el('button', { class: 'toggle', textContent: `${showAdvanced ? '▾' : '▸'} Advanced snapshot options` });
     advToggle.addEventListener('click', () => { showAdvanced = !showAdvanced; render(); });
     const waitIn = el('input', { type: 'number', min: '0', max: '60', step: '0.5', value: snapDraft.waitSeconds });
@@ -564,6 +578,7 @@ export function render() {
     );
     if (showAdvanced) body.append(snapshotOptionsForm(snapDraft, render));
     body.append(el('div', { class: 'row' }, snap), el('div', { class: 'row' }, pauseBtn, stop));
+    body.append(el('p', { class: 'hint', textContent: `Tip: hover or click on the page, then press ${SNAPSHOT_SHORTCUT_LABEL} to capture a snapshot.` }));
     if (state.paused) {
       body.append(el('p', { class: 'hint', textContent: 'Paused: your actions on the page are not being recorded.' }));
     }

@@ -128,6 +128,64 @@ test('addSnapshot defaults to a 4s wait and stores options only when given', () 
   assert.equal(steps[2].options, undefined);
 });
 
+test('isOverlayHint flags cookie banners, modals and dialogs but not page content', () => {
+  assert.equal(core.isOverlayHint({ testId: 'actionButton-accept', className: 'cookiefirst-root' }), true);
+  assert.equal(core.isOverlayHint({ className: 'btn btn-close d-flex', dataset: 'bsDismiss=modal' }), true);
+  assert.equal(core.isOverlayHint({ className: 'modal fade' }), true);
+  assert.equal(core.isOverlayHint({ inDialog: true }), true);
+  assert.equal(core.isOverlayHint({ className: 'nav-link dropdown-toggle' }), false);
+  assert.equal(core.isOverlayHint({ className: 'btn btn-primary-rev-inverted' }), false);
+});
+
+test('isMenuTrigger recognises dropdown and hover menu triggers', () => {
+  assert.equal(core.isMenuTrigger({ expanded: 'false', dataToggle: 'dropdown', className: 'nav-link dropdown-toggle' }), true);
+  assert.equal(core.isMenuTrigger({ hasPopup: 'true' }), true);
+  assert.equal(core.isMenuTrigger({ dataOnce: 'main-menu-dropdown-hover' }), true);
+  assert.equal(core.isMenuTrigger({ className: 'btn' }), false);
+  assert.equal(core.isMenuTrigger({ hasPopup: 'false' }), false);
+});
+
+test('appendStep collapses repeated hovers over the same target and keeps different ones', () => {
+  let steps = [];
+  const t = { css: '#menu' };
+  steps = core.appendStep(steps, { type: 'hover', target: t });
+  steps = core.appendStep(steps, { type: 'hover', target: t });
+  assert.equal(steps.length, 1);
+  steps = core.appendStep(steps, { type: 'click', target: { css: '#item' } });
+  steps = core.appendStep(steps, { type: 'hover', target: t });
+  assert.deepEqual(steps.map((s) => s.type), ['hover', 'click', 'hover']);
+});
+
+test('isSnapshotShortcut accepts Ctrl+S / Cmd+S only', () => {
+  assert.equal(core.isSnapshotShortcut({ key: 's', ctrlKey: true }), true);
+  assert.equal(core.isSnapshotShortcut({ key: 'S', ctrlKey: true }), true);
+  assert.equal(core.isSnapshotShortcut({ key: 's', metaKey: true }), true);
+  // plain S, other modifiers, other keys and held-key repeats are ignored
+  assert.equal(core.isSnapshotShortcut({ key: 's' }), false);
+  assert.equal(core.isSnapshotShortcut({ key: 's', ctrlKey: true, shiftKey: true }), false);
+  assert.equal(core.isSnapshotShortcut({ key: 's', ctrlKey: true, altKey: true }), false);
+  assert.equal(core.isSnapshotShortcut({ key: 'a', ctrlKey: true }), false);
+  assert.equal(core.isSnapshotShortcut({ key: 's', ctrlKey: true, repeat: true }), false);
+});
+
+test('rankTarget puts a within-scoped locator first and keeps the others as fallbacks', () => {
+  const t = core.rankTarget(
+    { role: 'button', name: 'Add to cart', text: 'Add to cart' },
+    ['div.shelf-item__buy-btn', 'body > div > main'],
+    'iPhone 12',
+  );
+  assert.equal(t.css, 'div.shelf-item__buy-btn');
+  assert.equal(t.within, 'iPhone 12');
+  assert.deepEqual(t.fallbacks.map((f) => Object.keys(f)[0]), ['role', 'css', 'text']);
+  // without a label nothing changes
+  assert.equal(core.rankTarget({ role: 'button', name: 'Go' }, ['.go']).role, 'button');
+});
+
+test('optional flag survives renumber', () => {
+  const steps = core.renumber([{ id: 'x', type: 'click', optional: true, target: { css: '#a' } }]);
+  assert.equal(steps[0].optional, true);
+});
+
 test('renumber preserves snapshot waitMs/options', () => {
   const steps = core.renumber([{ id: 'x', type: 'snapshot', checkpointId: 'a', name: 'A', waitMs: 2000, options: { scope: '.s' } }]);
   assert.equal(steps[0].waitMs, 2000);

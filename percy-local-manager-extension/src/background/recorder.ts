@@ -38,10 +38,10 @@ async function notifyTab(tabId: number | undefined, active: boolean) {
 }
 
 /** Asks the page for its viewport; resolves undefined if no content script answers. */
-async function askViewport(tabId: number): Promise<{ width: number; height: number } | undefined> {
+async function askViewport(tabId: number): Promise<{ width: number; height: number; pageKind?: string } | undefined> {
   try {
     const res = (await chrome.tabs.sendMessage(tabId, { kind: 'rec:viewport' })) as
-      | { width: number; height: number }
+      | { width: number; height: number; pageKind?: string }
       | undefined;
     return res?.width && res?.height ? res : undefined;
   } catch {
@@ -65,12 +65,13 @@ async function start(): Promise<RecordingState> {
       throw new Error('Could not attach the recorder to this page. Reload the page and try again.');
     }
   }
-  const viewport = measured ?? { width: 1280, height: 800 };
+  const viewport = measured ? { width: measured.width, height: measured.height } : { width: 1280, height: 800 };
   const state: RecordingState = {
     active: true,
     tabId: tab.id,
     startUrl: tab.url,
     viewport,
+    pageKind: measured?.pageKind,
     steps: [],
   };
   await save(state);
@@ -110,7 +111,7 @@ async function clear(): Promise<RecordingState> {
   return EMPTY;
 }
 
-const NEEDS_TARGET = new Set(['click', 'fill', 'select', 'check', 'uncheck']);
+const NEEDS_TARGET = new Set(['click', 'hover', 'fill', 'select', 'check', 'uncheck']);
 
 function hasLocator(step: Omit<WorkflowStep, 'id'>): boolean {
   const t = step.target;
@@ -137,7 +138,9 @@ async function saveWorkflow(name: string): Promise<{ workflowId?: string; name: 
     schemaVersion: 1,
     startUrl: state.startUrl,
     steps: renumber(state.steps),
-    settings: { defaultTimeoutMs: 10000, viewport: state.viewport },
+    // autoConsent/stabilize make replay robust on real-world sites (cookie
+    // banners, rotating carousels, lazy content); they are safe no-ops otherwise.
+    settings: { defaultTimeoutMs: 10000, viewport: state.viewport, autoConsent: true, stabilize: true, pageKind: state.pageKind },
   });
   await clear();
   return { workflowId: saved.workflowId, name: saved.name };

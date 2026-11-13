@@ -12,6 +12,9 @@ type Target struct {
 	Name      string   `json:"name,omitempty"`
 	CSS       string   `json:"css,omitempty"`
 	Text      string   `json:"text,omitempty"`
+	// Within narrows a repeated element (an "Add to cart" button on a product
+	// grid) to the item that contains this exact text, e.g. the product title.
+	Within    string   `json:"within,omitempty"`
 	Fallbacks []Target `json:"fallbacks,omitempty"`
 }
 
@@ -39,6 +42,10 @@ type Step struct {
 	ScrollX      int     `json:"scrollX,omitempty"`
 	ScrollY      int     `json:"scrollY,omitempty"`
 
+	// Optional interaction steps are skipped (with a warning) when their
+	// target never appears, instead of failing the run.
+	Optional bool `json:"optional,omitempty"`
+
 	// Snapshot-only: intentional wait before capture and Percy options.
 	WaitMs  int              `json:"waitMs,omitempty"`
 	Options *SnapshotOptions `json:"options,omitempty"`
@@ -51,6 +58,11 @@ type Viewport struct {
 
 type Settings struct {
 	DefaultTimeoutMs int      `json:"defaultTimeoutMs,omitempty"`
+	AutoConsent      bool     `json:"autoConsent,omitempty"`
+	Stabilize        bool     `json:"stabilize,omitempty"`
+	// PageKind is what the recorder detected about the start page ("spa",
+	// "cms", "static"); informational, replay re-detects the live page.
+	PageKind string `json:"pageKind,omitempty"`
 	Viewport         Viewport `json:"viewport"`
 }
 

@@ -69,6 +69,60 @@ export function isDynamicText(text: string): boolean {
   return false;
 }
 
+/**
+ * True for elements that belong to a cookie-consent / newsletter / pop-up
+ * overlay. Clicks inside them are recorded as optional steps because the
+ * overlay may legitimately not appear on replay (consent cookie, A/B, timing).
+ */
+export function isOverlayHint(attrs: {
+  testId?: string | null;
+  className?: string | null;
+  id?: string | null;
+  ariaLabel?: string | null;
+  inDialog?: boolean;
+  dataset?: string | null;
+}): boolean {
+  const hay = [attrs.testId, attrs.className, attrs.id, attrs.ariaLabel, attrs.dataset].filter(Boolean).join(' ');
+  if (/cookie|consent|gdpr|onetrust|cookiefirst|didomi|usercentrics|cookiebot|trustarc/i.test(hay)) return true;
+  if (/(^|[\s_-])(modal|popup|pop-up|newsletter|btn-close)([\s_-]|$)/i.test(hay)) return true;
+  return !!attrs.inDialog;
+}
+
+/**
+ * True for a menu trigger that reveals content (hover or click driven). Used
+ * to record a hover step before clicks that sit inside the revealed menu.
+ */
+export function isMenuTrigger(attrs: {
+  hasPopup?: string | null;
+  expanded?: string | null;
+  dataToggle?: string | null;
+  className?: string | null;
+  dataOnce?: string | null;
+}): boolean {
+  if (attrs.expanded === 'false' || attrs.expanded === 'true') return true;
+  if (attrs.hasPopup && attrs.hasPopup !== 'false') return true;
+  if (/dropdown|collapse|menu/i.test(attrs.dataToggle ?? '')) return true;
+  if (/dropdown-toggle/.test(attrs.className ?? '')) return true;
+  return /hover/i.test(attrs.dataOnce ?? '');
+}
+
+/**
+ * True for the snapshot shortcut: Ctrl+S (Cmd+S on macOS), with no Alt/Shift
+ * and not an auto-repeat of a held key.
+ */
+export function isSnapshotShortcut(e: {
+  key: string;
+  ctrlKey?: boolean;
+  metaKey?: boolean;
+  altKey?: boolean;
+  shiftKey?: boolean;
+  repeat?: boolean;
+}): boolean {
+  if (e.repeat || e.altKey || e.shiftKey) return false;
+  if (!(e.ctrlKey || e.metaKey)) return false;
+  return (e.key ?? '').toLowerCase() === 's';
+}
+
 /** Drop duplicate candidates, keeping the first (highest-priority) occurrence. */
 export function dedupeTargets(list: Target[]): Target[] {
   const seen = new Set<string>();
@@ -88,12 +142,15 @@ export function dedupeTargets(list: Target[]): Target[] {
  * candidates (id, attributes, stable classes, scoped paths), then text. Extra
  * css candidates are passed in `cssList`, best first.
  */
-export function rankTarget(candidates: Target, cssList: string[] = []): Target {
+export function rankTarget(candidates: Target, cssList: string[] = [], within?: string): Target {
   const all: Target[] = [];
+  // A repeated element (the same button on every product card) is identified
+  // by the item it sits in: that is the most reliable locator, so it goes first.
+  if (within && cssList[0]) all.push({ css: cssList[0], within });
   if (candidates.testId) all.push({ testId: candidates.testId });
   if (candidates.role && candidates.name) all.push({ role: candidates.role, name: candidates.name });
   if (candidates.css) all.push({ css: candidates.css });
-  for (const c of cssList) all.push({ css: c });
+  for (const c of within && cssList[0] ? cssList.slice(1) : cssList) all.push({ css: c });
   if (candidates.text) all.push({ text: candidates.text });
   if (all.length === 0) return candidates;
   const [primary, ...rest] = dedupeTargets(all);
@@ -133,6 +190,15 @@ export function appendStep(
     JSON.stringify(last.target) === JSON.stringify(step.target)
   ) {
     return [...steps.slice(0, -1), { ...step, id: last.id }];
+  }
+  // Collapse repeated hovers over the same element.
+  if (
+    last &&
+    step.type === 'hover' &&
+    last.type === 'hover' &&
+    JSON.stringify(last.target) === JSON.stringify(step.target)
+  ) {
+    return steps;
   }
   // Collapse consecutive scrolls.
   if (last && step.type === 'scroll' && last.type === 'scroll') {
