@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/jostan30/Percy_chrome_ext/go-backend/internal/api/handlers"
 	"github.com/jostan30/Percy_chrome_ext/go-backend/internal/middleware"
@@ -31,6 +32,8 @@ func (s *Server) routes() {
 	snapshotHandler := handlers.NewSnapshotHandler(s.app)
 	buildHandler := handlers.NewBuildHandler(s.app)
 	libraryHandler := handlers.NewLibraryHandler(s.app)
+	workflowHandler := handlers.NewWorkflowHandler(s.app)
+	runsHandler := handlers.NewRunsHandler(s.app)
 
 	s.mux.HandleFunc("/health" , handlers.Health)
 	s.mux.HandleFunc("/status" , handlers.Status)
@@ -70,11 +73,18 @@ func (s *Server) routes() {
 })
 
 	s.mux.HandleFunc("/build/finalize", buildHandler.Finalize)
+	s.mux.HandleFunc("/build/status", buildHandler.Status)
+	s.mux.HandleFunc("/build/stream", buildHandler.Stream)
 
 	s.mux.HandleFunc("/library/token" ,libraryHandler.SetToken)
 	s.mux.HandleFunc("/library/search", libraryHandler.Search)		
 	s.mux.HandleFunc("/library/status", libraryHandler.Status)
 	s.mux.HandleFunc("/library/all", libraryHandler.All)
+
+	s.mux.HandleFunc("/api/workflows", workflowHandler.Collection)
+	s.mux.HandleFunc("/api/workflows/", workflowHandler.Item)
+	s.mux.HandleFunc("/api/builds", runsHandler.Builds)
+	s.mux.HandleFunc("/api/builds/", runsHandler.Build)
 	
 }
 
@@ -85,6 +95,11 @@ func (s *Server) Start() error {
 		middleware.Logger,
 		middleware.CORS,
 	)
-	return http.ListenAndServe(s.addr ,handler)
+	srv := &http.Server{
+		Addr:              s.addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	return srv.ListenAndServe()
 }
 

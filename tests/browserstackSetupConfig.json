@@ -1,0 +1,31 @@
+userName: jostan_PjIlSk
+accessKey: 4MXXEcvicmA71x9r9UXE
+projectName: Percy Local Manager
+buildName: API + UI Sanity Test
+buildIdentifier: '#999'
+platforms:
+  - os: OS X
+    osVersion: Ventura
+    browserName: Chrome
+    browserVersion: latest
+parallelsPerPlatform: 1
+browserstackLocal: true
+debug: false
+networkLogs: false
+consoleLogs: errors
+testReporting: true
+testObservability: true
+additionalPlatforms: []
+testContextOptions:
+  skipSessionStatus: false
+  skipSessionName: false
+logDir: /Users/jostanmathias/Desktop/Development/Percy_chrome_ext/tests/log
+browserStackLocalOptions:
+  localIdentifier: 13_Oct_0115_jostanmathias-HR6F4P4P32_xjuz
+  skipBinaryInitialisation: false
+proxySettings:
+  proxyUrl: http://127.0.0.1:50922
+  proxyProtocol: http
+  proxyHost: 127.0.0.1
+  proxyPort: '50922'
+accessibility: false

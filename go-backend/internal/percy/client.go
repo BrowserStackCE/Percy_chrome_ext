@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"io"
 	"fmt"
+	"time"
 
 	"github.com/jostan30/Percy_chrome_ext/go-backend/internal/snapshot"
 )
@@ -36,6 +37,33 @@ func (c *Client) Health() (*HealthResponse ,error) {
 	}
 
 	return &health ,nil
+}
+
+// WaitIdle blocks until Percy reports all queued snapshots are processed,
+// the done channel closes (process died), or the timeout elapses.
+func (c *Client) WaitIdle(timeout time.Duration, done <-chan struct{}) error {
+	deadline := time.Now().Add(timeout)
+	httpc := &http.Client{Timeout: 2 * time.Minute}
+
+	for {
+		select {
+		case <-done:
+			return fmt.Errorf("percy exited while waiting for snapshots")
+		default:
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timed out waiting for Percy to finish snapshots")
+		}
+
+		resp, err := httpc.Get(c.baseURL + "/percy/idle")
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				return nil
+			}
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
 }
 
 func toSnapshotRequest(s snapshot.Snapshot) SnapshotRequest {

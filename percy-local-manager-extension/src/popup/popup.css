@@ -1197,3 +1197,185 @@ body {
   height: 3px;
   background: var(--violet-600);
 }
+.offline-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid #f5c2c7;
+  border-radius: 8px;
+  background: #fdecee;
+  color: #842029;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.offline-notice code {
+  font-family: monospace;
+  background: rgba(0, 0, 0, 0.06);
+  padding: 0 3px;
+  border-radius: 3px;
+}
+
+.popup__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.icon-button {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 4px;
+  border-radius: 6px;
+  color: inherit;
+}
+
+.icon-button:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.token-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid #ffe69c;
+  border-radius: 8px;
+  background: #fff8e1;
+  color: #664d03;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.tooltip-anchor {
+  position: relative;
+  display: inline-flex;
+}
+
+/* Cloud-style tooltip: hidden until the icon is hovered or focused. */
+.tooltip-bubble {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: -4px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #fff8e1;
+  color: #664d03;
+  border: 1px solid #f5b301;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-3px);
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s;
+  pointer-events: none;
+  z-index: 20;
+}
+
+/* Arrow pointing up at the icon. */
+.tooltip-bubble::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  right: 12px;
+  width: 10px;
+  height: 10px;
+  background: #fff8e1;
+  border-top: 1px solid #f5b301;
+  border-left: 1px solid #f5b301;
+  transform: rotate(45deg);
+}
+
+.tooltip-anchor:hover .tooltip-bubble,
+.tooltip-anchor:focus-within .tooltip-bubble {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.icon-button--attention {
+  background: #fff3cd;
+  color: #b45309;
+  box-shadow: 0 0 0 2px #f5b301;
+}
+
+.icon-button--pulse {
+  animation: token-icon-pulse 1.2s ease-in-out 3;
+}
+
+@keyframes token-icon-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px #f5b301; }
+  50% { box-shadow: 0 0 0 6px rgba(245, 179, 1, 0.35); }
+}
+
+/* Workflow recorder */
+.recorded-steps {
+  list-style: decimal inside;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.recorded-step {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.recorded-step__text--checkpoint {
+  font-weight: 600;
+  color: var(--violet-700);
+}
+
+.recorded-step__actions {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.edit-step {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.edit-step__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.saved-workflows {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+}
+
+/* Run progress / build history */
+.run-status { margin: 0; font-size: 12px; font-weight: 600; }
+.run-status--passed { color: var(--success-700, #15803d); }
+.run-status--failed, .run-status--cancelled { color: var(--error-700, #b91c1c); }
+.run-status--partial { color: #b45309; }
+.run-steps, .run-checkpoints, .build-history { margin: 0; padding-left: 16px; font-size: 12px; max-height: 140px; overflow-y: auto; }
+.run-steps { list-style: none; padding-left: 0; }
+.run-step--failed { color: var(--error-700, #b91c1c); }
+.run-step--skipped, .run-step--pending { opacity: 0.6; }
+.run-step__error { font-weight: 400; }
+
+.recorded-step__confirm {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--error-600, #d6403a);
+}

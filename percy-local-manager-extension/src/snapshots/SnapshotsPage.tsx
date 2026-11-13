@@ -9,13 +9,18 @@ import { ClearSnapshotsButton } from '../components/ClearSnapshotsButton';
 import { BrandMark } from '../components/BrandMark';
 import type { Snapshot } from '../types';
 import { EditSnapshotPanel } from '../components/EditSnapshotPanel';
+import { TokenRequiredNotice } from '../components/TokenRequiredNotice';
+import { useToken } from '../hooks/useToken';
+import { WorkflowRunsSection } from '../components/WorkflowRunsSection';
 
 export function SnapshotsPage() {
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [loading, setLoading] = useState(true);
-  const [token, setToken] = useState('');
+  const { token, hasToken, isLoading: isTokenLoading } = useToken();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editingSnapshot, setEditingSnapshot] = useState<Snapshot | null>(null);
+  // Slot (after the action bar) where the build progress card is rendered.
+  const [progressHost, setProgressHost] = useState<HTMLDivElement | null>(null);
 
   async function refresh() {
     setLoading(true);
@@ -134,20 +139,9 @@ export function SnapshotsPage() {
           </div>
         )}
 
-        <div className="token-section">
-          <label htmlFor="percy-token">
-            Percy Token
-          </label>
-
-          <input
-            id="percy-token"
-            type="password"
-            className="input"
-            placeholder="Enter Percy Token"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-          />
-        </div>
+        {!isTokenLoading && !hasToken && (
+          <TokenRequiredNotice message="A Percy token is required to finalize a build. Click the ⚙ icon in the Percy extension popup to set it." />
+        )}
 
         <div className="page-actions">
           <ClearSnapshotsButton
@@ -159,11 +153,16 @@ export function SnapshotsPage() {
             token={token}
             disabled={
               snapshots.length === 0 ||
-              token.trim() === ''
+              !hasToken
             }
             onFinalized={refresh}
+            progressHost={progressHost}
           />
         </div>
+
+        <div className="build-progress-slot" ref={setProgressHost} />
+
+        <WorkflowRunsSection token={token} hasToken={hasToken} busy={false} />
       </main>
       {editingSnapshot && (
         <EditSnapshotPanel

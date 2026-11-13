@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Neilson-like fixture</title>
+<style>
+  .dropdown-menu { display: none; }
+  .dropdown-menu.open { display: block; }
+  #backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 10; }
+  #cookie { position: fixed; bottom: 0; left: 0; right: 0; background: transparent; border: 0; padding: 0; z-index: 11; }
+  #cookie button { position: relative; z-index: 12; }
+</style>
+</head>
+<body>
+<!-- consent banner appears late, like CookieFirst; its backdrop blocks clicks -->
+<dialog id="cookie" aria-label="Cookie banner" hidden>
+  <div id="backdrop" data-testid="backdrop"></div>
+  <button type="button" data-testid="actionButton-accept" aria-label="Accept all cookies">Accept</button>
+</dialog>
+
+<nav>
+  <ul>
+    <li class="dropdown">
+      <!-- hover-driven menu; role=button on a link, like Bootstrap dropdown toggles -->
+      <a id="beach-toggle" class="nav-link dropdown-toggle" role="button" href="/beach" aria-expanded="false" data-bs-toggle="dropdown" data-once="main-menu-dropdown-hover">Beach Clubs</a>
+      <div class="dropdown-menu" aria-labelledby="beach-toggle">
+        <a href="/beach/our-resorts">View all Beach Clubs</a>
+        <a href="/beach/croatia/alana-beachclub">Alana Beach Club</a>
+      </div>
+    </li>
+  </ul>
+</nav>
+
+<!-- hidden duplicate of a link, like the mega-menu / mobile copies -->
+<a href="/beach/our-resorts" style="display:none">View all Beach Clubs</a>
+
+<main>
+  <h1>Welcome</h1>
+  <p id="result">idle</p>
+</main>
+
+<script>
+  const cookie = document.getElementById('cookie');
+  const toggle = document.getElementById('beach-toggle');
+  const menu = document.querySelector('.dropdown-menu');
+  // banner shows after a delay unless consent was given
+  setTimeout(() => { cookie.hidden = false; cookie.setAttribute('open', ''); }, 400);
+  cookie.querySelector('button').addEventListener('click', () => { cookie.remove(); });
+  // menu opens on hover only
+  toggle.parentElement.addEventListener('mouseenter', () => { menu.classList.add('open'); toggle.setAttribute('aria-expanded', 'true'); });
+  toggle.parentElement.addEventListener('mouseleave', () => { menu.classList.remove('open'); toggle.setAttribute('aria-expanded', 'false'); });
+  menu.querySelectorAll('a').forEach((a) => a.addEventListener('click', (e) => {
+    e.preventDefault();
+    document.getElementById('result').textContent = 'went:' + a.getAttribute('href');
+  }));
+  toggle.addEventListener('click', (e) => e.preventDefault());
+</script>
+</body>
+</html>

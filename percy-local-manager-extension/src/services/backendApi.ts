@@ -1,5 +1,10 @@
 import { ENDPOINTS } from '../utils/constants';
-import type { Snapshot, FinalizeBuildResponse ,LibrarySnapshotReference } from '../types';
+import type {
+  Snapshot,
+  BuildStatus,
+  LibrarySnapshotReference,
+  BranchSettings,
+} from '../types';
 
 /**
  * All communication with the Go backend lives here. This file knows nothing
@@ -72,9 +77,11 @@ const response = await fetch(ENDPOINTS.SNAPSHOTS, { method: 'DELETE' });
 await parseJsonOrThrow(response);
 }
 
+/** Starts the build job in the background (202). Progress comes from getBuildStatus. */
 export async function finalizeBuild(
-token: string
-): Promise<FinalizeBuildResponse> {
+  token: string,
+  branchSettings?: BranchSettings
+): Promise<void> {
 const response = await fetch(ENDPOINTS.FINALIZE_BUILD, {
   method: 'POST',
   headers: {
@@ -82,11 +89,17 @@ const response = await fetch(ENDPOINTS.FINALIZE_BUILD, {
   },
   body: JSON.stringify({
     token,
+    branch: branchSettings?.branch,
+    targetBranch: branchSettings?.targetBranch,
   }),
 });
 
-const data = await parseJsonOrThrow(response);
-return data as FinalizeBuildResponse;
+await parseJsonOrThrow(response);
+}
+
+export async function getBuildStatus(): Promise<BuildStatus> {
+  const response = await fetch(ENDPOINTS.BUILD_STATUS, { method: 'GET' });
+  return (await parseJsonOrThrow(response)) as BuildStatus;
 }
 
 export async function setLibraryToken(token: string): Promise<void> {
