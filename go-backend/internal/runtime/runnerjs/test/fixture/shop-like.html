@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Shop-like fixture</title>
+<style>
+  body { margin: 0; font-family: sans-serif; }
+  /* sticky header that overlaps the top of the fixed side cart, like bstackdemo */
+  .Navbar_root__2kbI9 { position: sticky; top: 0; height: 100px; background: #222; color: #fff; z-index: 40; }
+  .float-cart { position: fixed; top: 0; right: -420px; width: 420px; height: 100vh; background: #111; color: #fff; transition: right .2s; }
+  .float-cart--open { right: 0; }
+  .float-cart__close-btn { position: absolute; top: 75px; left: -50px; width: 50px; height: 50px; background: #333; color: #fff; cursor: pointer; }
+  .shelf-container { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 12px; }
+  .shelf-item { border: 1px solid #ddd; padding: 8px; }
+  .shelf-item__buy-btn { background: #000; color: #fff; padding: 6px; cursor: pointer; }
+</style>
+</head>
+<body>
+<div id="__next">
+  <div class="Navbar_root__2kbI9">Shop</div>
+  <main>
+    <div class="shelf-container" id="grid"></div>
+  </main>
+  <div class="float-cart" id="cart">
+    <div class="float-cart__close-btn" id="close">X</div>
+    <div id="lines"></div>
+  </div>
+</div>
+<script>
+  const names = ['iPhone 12', 'iPhone 12 Mini', 'iPhone 12 Pro', 'iPhone 12 Pro Max', 'Galaxy S20', 'Galaxy S21', 'Pixel 4', 'Pixel 5'];
+  const grid = document.getElementById('grid');
+  // list keys are numeric ids, exactly like the real shop
+  names.forEach((n, i) => {
+    const card = document.createElement('div');
+    card.className = 'shelf-item';
+    card.id = String(i + 1);
+    card.innerHTML = `<p class="shelf-item__title">${n}</p><div class="price">$${799 + i}.00</div><div class="shelf-item__buy-btn">Add to cart</div>`;
+    card.querySelector('.shelf-item__buy-btn').addEventListener('click', () => {
+      document.getElementById('lines').textContent = 'cart:' + n;
+      document.getElementById('cart').classList.add('float-cart--open');
+    });
+    grid.append(card);
+  });
+  document.getElementById('close').addEventListener('click', () => {
+    document.getElementById('cart').classList.remove('float-cart--open');
+  });
+</script>
+</body>
+</html>

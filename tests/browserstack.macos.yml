@@ -1,0 +1,31 @@
+# =============================
+# BrowserStack config — OS X only
+# =============================
+# Used by the "BrowserStack Automate (OS X)" GitHub Actions job:
+#   npx browserstack-node-sdk playwright test --workers=1 --browserstack.config=browserstack.macos.yml
+# The Go backend keeps ONE snapshot queue and ONE build slot, so each platform
+# runs in its own job (own runner, own backend + Vite server).
+
+# Credentials are read from environment variables — never commit real values here.
+userName: ${BROWSERSTACK_USERNAME}
+accessKey: ${BROWSERSTACK_ACCESS_KEY}
+
+projectName: Percy Local Manager
+buildName: API + UI Sanity Test
+buildIdentifier: '#${BUILD_NUMBER}'
+
+platforms:
+  - os: OS X
+    osVersion: Ventura
+    browserName: Chrome
+    browserVersion: latest
+
+parallelsPerPlatform: 1
+
+# The Go backend runs on localhost — BrowserStack Local tunnel is required.
+browserstackLocal: true
+
+debug: false
+networkLogs: false
+consoleLogs: errors
+testReporting: true
